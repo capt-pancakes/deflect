@@ -104,6 +104,7 @@ export class Game {
   // Animation
   animTime = 0;
   menuPulse = 0;
+  dt = 0;
 
   // Deflector cooldown
   lastDeflectorTime = 0;
@@ -112,6 +113,7 @@ export class Game {
 
   // Music
   music = new SongPlayer();
+  private prevMusicEventType: string | null = null;
 
   // Collision detection
   collisions: CollisionSystem;
@@ -313,6 +315,7 @@ export class Game {
   }
 
   update(dt: number) {
+    this.dt = dt;
     this.animTime += dt;
     this.menuPulse += dt;
 
@@ -335,6 +338,16 @@ export class Game {
 
     // Always update music state (even during tutorial) so beat-reactive visuals stay synced
     this.music.update(scaledDt);
+
+    // Detect drop transitions for screen shake + particle burst (Phase 4.2)
+    const currentMusicEvent = this.music.getCurrentEvent();
+    const currentEventType = currentMusicEvent?.type ?? null;
+    if (currentEventType === 'drop' && this.prevMusicEventType !== 'drop' && !this.reducedMotion) {
+      this.shakeIntensity = 6;
+      this.particles.burst(center2(this), '#6688ff', 30, 400, 0.8);
+      this.particles.burst(center2(this), '#ffffff', 15, 300, 0.5);
+    }
+    this.prevMusicEventType = currentEventType;
 
     // Tutorial logic
     if (this.tutorial.isActive()) {
