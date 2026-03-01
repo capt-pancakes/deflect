@@ -349,7 +349,12 @@ export class Game {
     this.updateShake(scaledDt);
     this.updateFloatingTexts(scaledDt);
     this.updateNearMissRings(scaledDt);
-    this.corePulse += scaledDt * 2;
+    // During gameplay, sync core pulse to beat phase
+    if (this.state === 'playing' && !this.tutorial.isActive()) {
+      this.corePulse = this.music.getBeatState().beatPhase * Math.PI * 2;
+    } else {
+      this.corePulse += scaledDt * 2;
+    }
     this.coreDamageFlash = Math.max(0, this.coreDamageFlash - scaledDt * 3);
 
     // Smooth score display
