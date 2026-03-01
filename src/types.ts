@@ -14,6 +14,7 @@ export interface Signal {
   age: number;
   enteredArena: boolean;
   deflected: boolean;
+  nearMissTriggered?: boolean;
 }
 
 export interface Deflector {
@@ -42,6 +43,19 @@ export interface Particle {
   radius: number;
 }
 
+export interface FloatingText {
+  text: string;
+  pos: Vec2;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
+export interface NearMissRing {
+  life: number;
+  radius: number;
+}
+
 export type SignalColor = 'red' | 'blue' | 'green' | 'yellow';
 
 export type GameMode = 'arcade' | 'zen' | 'daily';
@@ -57,16 +71,6 @@ export interface GameConfig {
   signalRadius: number;
   signalSpeed: number;
   spawnInterval: number;
-}
-
-export interface ScoreData {
-  score: number;
-  combo: number;
-  maxCombo: number;
-  accuracy: number;
-  survived: number;
-  catches: number;
-  misses: number;
 }
 
 export const COLORS: Record<SignalColor, string> = {

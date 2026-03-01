@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0a0a1a">
   <meta name="description" content="Swipe to deflect. Match the colors. Protect the core. A fast-paced mobile game.">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
-  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <title>DEFLECT</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -46,7 +46,7 @@
 </head>
 <body>
   <div id="loading">DEFLECT</div>
-  <canvas id="game"></canvas>
+  <canvas id="game" role="img" aria-label="DEFLECT game - swipe to deflect colored signals into matching ports"></canvas>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

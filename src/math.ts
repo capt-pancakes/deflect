@@ -55,6 +55,35 @@ export function fromAngle(angle: number, magnitude: number = 1): Vec2 {
   return { x: Math.cos(angle) * magnitude, y: Math.sin(angle) * magnitude };
 }
 
+// --- Mutable variants for hot paths (modify target in place) ---
+
+export function addMut(target: Vec2, b: Vec2): Vec2 {
+  target.x += b.x;
+  target.y += b.y;
+  return target;
+}
+
+export function subMut(target: Vec2, b: Vec2): Vec2 {
+  target.x -= b.x;
+  target.y -= b.y;
+  return target;
+}
+
+export function scaleMut(target: Vec2, s: number): Vec2 {
+  target.x *= s;
+  target.y *= s;
+  return target;
+}
+
+export function normalizeMut(target: Vec2): Vec2 {
+  const len = Math.sqrt(target.x * target.x + target.y * target.y);
+  if (len > 0) {
+    target.x /= len;
+    target.y /= len;
+  }
+  return target;
+}
+
 /** Distance from point to line segment */
 export function pointToSegmentDist(p: Vec2, a: Vec2, b: Vec2): number {
   const ab = sub(b, a);

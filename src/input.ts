@@ -1,5 +1,5 @@
-import type { Vec2, Deflector } from './types';
-import { dist, length, sub } from './math';
+import type { Vec2 } from './types';
+import { dist } from './math';
 
 export interface SwipeResult {
   start: Vec2;
@@ -19,29 +19,49 @@ export class InputHandler {
   private scaleX = 1;
   private scaleY = 1;
 
+  // Unified PointerEvent handlers
+  private onPointerDown = (e: PointerEvent) => {
+    e.preventDefault();
+    this.touching = true;
+    this.swipeStart = this.getPos(e);
+    this.swipeCurrent = this.swipeStart;
+  };
+
+  private onPointerMove = (e: PointerEvent) => {
+    e.preventDefault();
+    if (this.touching) {
+      this.swipeCurrent = this.getPos(e);
+    }
+  };
+
+  private onPointerUp = (e: PointerEvent) => {
+    e.preventDefault();
+    if (this.touching && this.swipeStart) {
+      const end = this.getPos(e);
+      const swipeLen = dist(this.swipeStart, end);
+      if (swipeLen >= MIN_SWIPE_LENGTH) {
+        this.pendingSwipe = { start: this.swipeStart, end };
+      } else {
+        this.tapPending = true;
+        this.tapPos = end;
+      }
+    }
+    this.touching = false;
+    this.swipeStart = null;
+    this.swipeCurrent = null;
+  };
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    canvas.style.touchAction = 'none';
     this.bindEvents();
   }
 
-  private getPos(e: TouchEvent | MouseEvent): Vec2 {
+  private getPos(e: PointerEvent): Vec2 {
     const rect = this.canvas.getBoundingClientRect();
-    if ('touches' in e && e.touches.length > 0) {
-      return {
-        x: (e.touches[0].clientX - rect.left) * this.scaleX,
-        y: (e.touches[0].clientY - rect.top) * this.scaleY,
-      };
-    }
-    if ('changedTouches' in e && e.changedTouches.length > 0) {
-      return {
-        x: (e.changedTouches[0].clientX - rect.left) * this.scaleX,
-        y: (e.changedTouches[0].clientY - rect.top) * this.scaleY,
-      };
-    }
-    const me = e as MouseEvent;
     return {
-      x: (me.clientX - rect.left) * this.scaleX,
-      y: (me.clientY - rect.top) * this.scaleY,
+      x: (e.clientX - rect.left) * this.scaleX,
+      y: (e.clientY - rect.top) * this.scaleY,
     };
   }
 
@@ -52,66 +72,16 @@ export class InputHandler {
   }
 
   private bindEvents() {
-    // Touch events
-    this.canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      this.touching = true;
-      this.swipeStart = this.getPos(e);
-      this.swipeCurrent = this.swipeStart;
-    }, { passive: false });
+    this.canvas.addEventListener('pointerdown', this.onPointerDown, { passive: false });
+    this.canvas.addEventListener('pointermove', this.onPointerMove, { passive: false });
+    this.canvas.addEventListener('pointerup', this.onPointerUp, { passive: false });
+  }
 
-    this.canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      if (this.touching) {
-        this.swipeCurrent = this.getPos(e);
-      }
-    }, { passive: false });
-
-    this.canvas.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      if (this.touching && this.swipeStart) {
-        const end = this.getPos(e);
-        const swipeLen = dist(this.swipeStart, end);
-        if (swipeLen >= MIN_SWIPE_LENGTH) {
-          this.pendingSwipe = { start: this.swipeStart, end };
-        } else {
-          this.tapPending = true;
-          this.tapPos = end;
-        }
-      }
-      this.touching = false;
-      this.swipeStart = null;
-      this.swipeCurrent = null;
-    }, { passive: false });
-
-    // Mouse events for desktop testing
-    this.canvas.addEventListener('mousedown', (e) => {
-      this.touching = true;
-      this.swipeStart = this.getPos(e);
-      this.swipeCurrent = this.swipeStart;
-    });
-
-    this.canvas.addEventListener('mousemove', (e) => {
-      if (this.touching) {
-        this.swipeCurrent = this.getPos(e);
-      }
-    });
-
-    this.canvas.addEventListener('mouseup', (e) => {
-      if (this.touching && this.swipeStart) {
-        const end = this.getPos(e);
-        const swipeLen = dist(this.swipeStart, end);
-        if (swipeLen >= MIN_SWIPE_LENGTH) {
-          this.pendingSwipe = { start: this.swipeStart, end };
-        } else {
-          this.tapPending = true;
-          this.tapPos = end;
-        }
-      }
-      this.touching = false;
-      this.swipeStart = null;
-      this.swipeCurrent = null;
-    });
+  destroy(): void {
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
+    this.clearPending();
   }
 
   consumeSwipe(): SwipeResult | null {
@@ -134,6 +104,15 @@ export class InputHandler {
       return pos;
     }
     return null;
+  }
+
+  clearPending(): void {
+    this.pendingSwipe = null;
+    this.tapPending = false;
+    this.tapPos = null;
+    this.touching = false;
+    this.swipeStart = null;
+    this.swipeCurrent = null;
   }
 
   getActiveSwipe(): { start: Vec2; end: Vec2 } | null {

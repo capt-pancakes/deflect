@@ -3,6 +3,7 @@ import { Game } from './game';
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const loading = document.getElementById('loading') as HTMLDivElement;
 
+if (!canvas) throw new Error('Canvas element not found');
 const game = new Game(canvas);
 
 // Hide loading screen
@@ -29,7 +30,3 @@ requestAnimationFrame((time) => {
   requestAnimationFrame(frame);
 });
 
-// Register service worker for offline play
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
-}

@@ -1,3 +1,6 @@
+import type { SignalColor } from './types';
+import { SIGNAL_COLORS } from './types';
+
 /** Generate a shareable score card with visual pattern */
 export function generateScoreCard(stats: {
   score: number;
@@ -6,16 +9,17 @@ export function generateScoreCard(stats: {
   misses: number;
   maxCombo: number;
   mode: string;
-  colorMisses?: Record<string, number>;
+  colorMisses?: Partial<Record<SignalColor, number>>;
 }): string {
-  const accuracy = stats.catches + stats.misses > 0
-    ? Math.round((stats.catches / (stats.catches + stats.misses)) * 100)
-    : 0;
+  const accuracy =
+    stats.catches + stats.misses > 0
+      ? Math.round((stats.catches / (stats.catches + stats.misses)) * 100)
+      : 0;
 
   const modeLabel = stats.mode === 'zen' ? 'ZEN' : stats.mode === 'daily' ? 'DAILY' : 'ARCADE';
 
   // Color performance blocks (shows which colors you handled well)
-  const colorEmoji: Record<string, string> = {
+  const colorEmoji: Record<SignalColor, string> = {
     red: '\ud83d\udfe5',
     blue: '\ud83d\udfe6',
     green: '\ud83d\udfe9',
@@ -27,7 +31,7 @@ export function generateScoreCard(stats: {
   const totalSignals = stats.catches + stats.misses;
   let pattern = '';
   if (totalSignals > 0) {
-    for (const color of ['red', 'blue', 'green', 'yellow']) {
+    for (const color of SIGNAL_COLORS) {
       const missed = colorMisses[color] || 0;
       if (missed === 0) {
         pattern += colorEmoji[color] || '\u2b1c'; // Full color = no misses
@@ -42,17 +46,21 @@ export function generateScoreCard(stats: {
   // Accuracy bar
   const barLen = 10;
   const filled = Math.round((accuracy / 100) * barLen);
-  const bar = '\u2b1b'.repeat(barLen - filled) + '\u2b1c'.repeat(filled);
+  const bar = '\u2b1c'.repeat(filled) + '\u2b1b'.repeat(barLen - filled);
 
   // Combo indicator
-  const comboIcon = stats.maxCombo >= 10 ? '\ud83d\udd25\ud83d\udd25\ud83d\udd25'
-    : stats.maxCombo >= 5 ? '\ud83d\udd25\ud83d\udd25'
-    : stats.maxCombo >= 3 ? '\ud83d\udd25'
-    : '';
+  const comboIcon =
+    stats.maxCombo >= 10
+      ? '\ud83d\udd25\ud83d\udd25\ud83d\udd25'
+      : stats.maxCombo >= 5
+        ? '\ud83d\udd25\ud83d\udd25'
+        : stats.maxCombo >= 3
+          ? '\ud83d\udd25'
+          : '';
 
   const lines = [
     `DEFLECT ${modeLabel} ${pattern}`,
-    `${stats.score} pts | ${Math.floor(stats.survived)}s | ${stats.maxCombo}x ${comboIcon}`,
+    `${stats.score} pts | ${stats.survived < 1 ? '<1s' : `${Math.floor(stats.survived)}s`} | ${stats.maxCombo}x ${comboIcon}`,
     `${bar} ${accuracy}%`,
     '',
     typeof window !== 'undefined' ? window.location.href : '',

@@ -1,6 +1,7 @@
 /** Procedural audio using Web Audio API - no external files needed */
 
 let audioCtx: AudioContext | null = null;
+const pendingTimeouts: ReturnType<typeof setTimeout>[] = [];
 
 function getCtx(): AudioContext | null {
   if (!audioCtx) {
@@ -68,14 +69,14 @@ export const audio = {
 
   gameOver() {
     playTone(440, 0.15, 'sine', 0.1, 220);
-    setTimeout(() => playTone(330, 0.15, 'sine', 0.1, 165), 150);
-    setTimeout(() => playTone(220, 0.4, 'sine', 0.1, 110), 300);
+    pendingTimeouts.push(setTimeout(() => playTone(330, 0.15, 'sine', 0.1, 165), 150));
+    pendingTimeouts.push(setTimeout(() => playTone(220, 0.4, 'sine', 0.1, 110), 300));
   },
 
   start() {
     playTone(330, 0.1, 'sine', 0.08);
-    setTimeout(() => playTone(440, 0.1, 'sine', 0.08), 100);
-    setTimeout(() => playTone(550, 0.15, 'sine', 0.1), 200);
+    pendingTimeouts.push(setTimeout(() => playTone(440, 0.1, 'sine', 0.08), 100));
+    pendingTimeouts.push(setTimeout(() => playTone(550, 0.15, 'sine', 0.1), 200));
   },
 
   swipe() {
@@ -85,5 +86,14 @@ export const audio = {
   init() {
     // Initialize audio context on first user interaction
     getCtx();
+  },
+
+  destroy() {
+    for (const id of pendingTimeouts) clearTimeout(id);
+    pendingTimeouts.length = 0;
+    if (audioCtx) {
+      audioCtx.close().catch(() => {});
+      audioCtx = null;
+    }
   },
 };
