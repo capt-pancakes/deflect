@@ -34,7 +34,7 @@ import type { CollisionEvent } from './collision';
 import { TutorialManager } from './tutorial';
 import { Renderer } from './renderer';
 import { audio } from './audio';
-import { MusicEngine } from './music';
+import { SongPlayer } from './song-player';
 import { generateScoreCard, shareScore } from './share';
 
 export class Game {
@@ -109,7 +109,7 @@ export class Game {
   DEFLECTOR_COOLDOWN = 0.2; // 200ms minimum between deflectors
 
   // Music
-  music = new MusicEngine();
+  music = new SongPlayer();
 
   // Collision detection
   collisions: CollisionSystem;
@@ -284,7 +284,8 @@ export class Game {
     this.ports = [];
     this.setupPorts();
     audio.start();
-    this.music.start();
+    // Song data will be loaded when MP3+JSON pairs are available
+    // For now, SongPlayer runs without song data (returns zero BeatState)
 
     // Spawn first signal for tutorial
     if (this.tutorial.phase === 1) {
@@ -331,6 +332,9 @@ export class Game {
     }
     const scaledDt = dt * this.timeScale;
 
+    // Always update music state (even during tutorial) so beat-reactive visuals stay synced
+    this.music.update(scaledDt);
+
     // Tutorial logic
     if (this.tutorial.isActive()) {
       this.updateTutorial(scaledDt);
@@ -345,7 +349,6 @@ export class Game {
     this.updateDeflectors(scaledDt);
     this.checkCollisions();
     this.particles.update(scaledDt);
-    this.music.update(scaledDt);
     this.updateShake(scaledDt);
     this.updateFloatingTexts(scaledDt);
     this.updateNearMissRings(scaledDt);
@@ -372,7 +375,8 @@ export class Game {
     this.tutorial.update(dt);
     this.particles.update(dt);
     this.updateDeflectors(dt);
-    this.corePulse += dt * 2;
+    // Sync core pulse to beat phase (music.update() runs before this)
+    this.corePulse = this.music.getBeatState().beatPhase * Math.PI * 2;
 
     if (this.tutorial.phase === 1) {
       // Slow the signal way down during tutorial
@@ -537,10 +541,6 @@ export class Game {
     // Map difficulty to music layers
     const musicLayers = this.difficulty.activeColors + 1; // 1 color = 2 layers (kick+hat), 2 = 3, 3 = 4, 4 = 5
     this.music.setIntensityLevel(musicLayers);
-
-    // Map elapsed time to BPM: 110 → 140 over 90s
-    const bpm = Math.min(140, 110 + (this.elapsed / 90) * 30);
-    this.music.setBPM(bpm);
   }
 
   handleInput() {

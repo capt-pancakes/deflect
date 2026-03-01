@@ -2,7 +2,7 @@ import type { Signal, Deflector, Port, Vec2, SignalColor, GameState, GameMode, F
 import { COLORS, COLOR_GLOW } from './types';
 import { normalize, sub, vec2 } from './math';
 import type { ParticleSystem } from './particles';
-import type { BeatState } from './music';
+import type { BeatState } from './song-player';
 
 // ---- Font constants ----
 
