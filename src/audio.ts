@@ -3,7 +3,7 @@
 let audioCtx: AudioContext | null = null;
 const pendingTimeouts: ReturnType<typeof setTimeout>[] = [];
 
-function getCtx(): AudioContext | null {
+export function getCtx(): AudioContext | null {
   if (!audioCtx) {
     try {
       audioCtx = new AudioContext();
