@@ -40,7 +40,7 @@ export class SongPlayer {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
-  private frequencyData: Uint8Array = new Uint8Array(NUM_BINS);
+  private frequencyData: Uint8Array<ArrayBuffer> = new Uint8Array(NUM_BINS);
   /** Smoothed bar heights for interpolation (0-1 range) */
   private smoothedBars: Float32Array = new Float32Array(NUM_BINS);
 
