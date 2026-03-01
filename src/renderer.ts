@@ -247,20 +247,30 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     game: RenderableGameState,
     alpha: number,
+    beatState?: BeatState,
   ): void {
-    ctx.strokeStyle = `rgba(60, 60, 100, ${alpha})`;
-    ctx.lineWidth = 2;
+    const kick = beatState && !game.reducedMotion ? beatState.kickIntensity : 0;
+    const vi = beatState ? beatState.visualIntensity : 0;
+    const effectiveAlpha = alpha + kick * 0.15 * vi;
+    const effectiveWidth = 2 + kick * 4 * vi;
+    ctx.strokeStyle = `rgba(60, 60, 100, ${effectiveAlpha})`;
+    ctx.lineWidth = effectiveWidth;
     ctx.beginPath();
     ctx.arc(game.centerX, game.centerY, game.arenaRadius, 0, Math.PI * 2);
     ctx.stroke();
   }
 
   private renderGame(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
-    this.renderArenaRing(ctx, game, 0.12);
-    this.renderPorts(ctx, game);
+    const beatState = game.music.getBeatState();
+    this.renderArenaRing(ctx, game, 0.12, beatState);
+    if (!game.reducedMotion && beatState.kickIntensity > 0) {
+      ctx.fillStyle = `rgba(40, 40, 80, ${beatState.kickIntensity * 0.08 * beatState.visualIntensity})`;
+      ctx.fillRect(0, 0, game.width, game.height);
+    }
+    this.renderPorts(ctx, game, beatState);
     this.renderNearMissRings(ctx, game);
     this.renderCore(ctx, game);
-    this.renderDeflectors(ctx, game);
+    this.renderDeflectors(ctx, game, beatState);
 
     // Active swipe preview
     const activeSwipe = game.input.getActiveSwipe();
@@ -275,7 +285,7 @@ export class Renderer {
       ctx.setLineDash([]);
     }
 
-    this.renderSignals(ctx, game);
+    this.renderSignals(ctx, game, beatState);
     game.particles.render(ctx);
     this.renderFloatingTexts(ctx, game);
 
@@ -327,7 +337,11 @@ export class Renderer {
     ctx.fillText('SWIPE TO DEFLECT!', game.centerX, game.height - 100);
   }
 
-  private renderPorts(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+  private renderPorts(ctx: CanvasRenderingContext2D, game: RenderableGameState, beatState?: BeatState): void {
+    const breathe = beatState && !game.reducedMotion
+      ? Math.sin(Math.PI * 2 * beatState.beatPhase) * 3 * beatState.visualIntensity
+      : 0;
+
     for (const port of game.ports) {
       const color = COLORS[port.color];
       const glow = COLOR_GLOW[port.color];
@@ -345,9 +359,9 @@ export class Renderer {
         ? Math.sin(game.animTime * 6 + port.pulsePhase) * 0.25 + 0.95
         : Math.sin(game.animTime * 2 + port.pulsePhase) * 0.1 + 0.9;
 
-      // Outer glow (bigger when hungry)
+      // Outer glow (bigger when hungry, breathing with beat)
       ctx.strokeStyle = glow;
-      ctx.lineWidth = (isHungry ? 28 : 18) * pulse;
+      ctx.lineWidth = (isHungry ? 28 : 18) * pulse + breathe;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.arc(game.centerX, game.centerY, game.arenaRadius, port.angleStart, port.angleEnd);
@@ -472,7 +486,11 @@ export class Renderer {
     }
   }
 
-  private renderDeflectors(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+  private renderDeflectors(ctx: CanvasRenderingContext2D, game: RenderableGameState, beatState?: BeatState): void {
+    const snareBloom = beatState && !game.reducedMotion
+      ? beatState.snareIntensity * 15 * beatState.visualIntensity
+      : 0;
+
     for (const d of game.deflectors) {
       const alpha = d.opacity;
       const lifeRatio = d.life / d.maxLife;
@@ -487,7 +505,7 @@ export class Renderer {
       ctx.lineCap = 'round';
 
       ctx.shadowColor = `rgba(255, 255, 255, ${alpha * 0.8})`;
-      ctx.shadowBlur = 10 * alpha;
+      ctx.shadowBlur = 10 * alpha + snareBloom;
 
       ctx.beginPath();
       ctx.moveTo(d.start.x, d.start.y);
@@ -507,7 +525,11 @@ export class Renderer {
     }
   }
 
-  private renderSignals(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+  private renderSignals(ctx: CanvasRenderingContext2D, game: RenderableGameState, beatState?: BeatState): void {
+    const trailBoost = beatState && !game.reducedMotion
+      ? 1 + beatState.snareIntensity * 0.5 * beatState.visualIntensity
+      : 1;
+
     for (const s of game.signals) {
       if (!s.alive) continue;
       const color = COLORS[s.color];
@@ -515,7 +537,7 @@ export class Renderer {
       // Trail with gradient opacity
       if (s.trail.length > 1) {
         for (let i = 1; i < s.trail.length; i++) {
-          const alpha = (i / s.trail.length) * 0.5;
+          const alpha = (i / s.trail.length) * 0.5 * trailBoost;
           const [cr, cg, cb] = hexToRgb(color);
           ctx.strokeStyle = `rgba(${cr},${cg},${cb},${alpha})`;
           ctx.lineWidth = s.radius * (0.5 + i / s.trail.length);
