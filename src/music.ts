@@ -105,6 +105,9 @@ export class MusicEngine {
   private lastBeatTime = 0;
   private arpIndex = 0;
 
+  // Pending visual events — queued at schedule time, drained at playback time
+  private pendingEvents: { time: number; type: 'kick' | 'snare' | 'hat' }[] = [];
+
   // Bass: 1-bar pattern (16 slots), root = A2 (110Hz)
   private bassPattern: (number | null)[] = [
     0, null, null, null, 0, null, null, 7,
@@ -147,6 +150,7 @@ export class MusicEngine {
     this.beatState.snareIntensity = 0;
     this.beatState.hatIntensity = 0;
     this.beatState.beatPhase = 0;
+    this.pendingEvents = [];
     // Reset scheduler timing
     if (this.ctx) {
       this.nextNoteTime = this.ctx.currentTime + 0.05;
@@ -155,15 +159,37 @@ export class MusicEngine {
   }
 
   update(dt: number): void {
+    const ctx = this.ctx;
+
+    // Drain pending visual events that have reached their playback time
+    if (ctx) {
+      const now = ctx.currentTime;
+      while (this.pendingEvents.length > 0 && this.pendingEvents[0].time <= now) {
+        const event = this.pendingEvents.shift()!;
+        switch (event.type) {
+          case 'kick':
+            this.beatState.kickIntensity = 1;
+            this.lastBeatTime = event.time;
+            break;
+          case 'snare':
+            this.beatState.snareIntensity = 1;
+            break;
+          case 'hat':
+            this.beatState.hatIntensity = 1;
+            break;
+        }
+      }
+    }
+
     const decay = this.config.intensityDecayRate * dt;
     this.beatState.kickIntensity = Math.max(0, this.beatState.kickIntensity - decay);
     this.beatState.snareIntensity = Math.max(0, this.beatState.snareIntensity - decay);
     this.beatState.hatIntensity = Math.max(0, this.beatState.hatIntensity - decay);
 
     // Compute beatPhase from AudioContext timing
-    if (this.ctx) {
+    if (ctx) {
       const secondsPerBeat = 60 / this.beatState.bpm;
-      const timeSinceLastBeat = (this.ctx.currentTime - this.lastBeatTime) % secondsPerBeat;
+      const timeSinceLastBeat = (ctx.currentTime - this.lastBeatTime) % secondsPerBeat;
       this.beatState.beatPhase = timeSinceLastBeat / secondsPerBeat;
     }
   }
@@ -210,8 +236,6 @@ export class MusicEngine {
     clickGain.connect(this.masterGain);
     click.start(time);
     click.stop(time + 0.01);
-
-    this.triggerKick();
   }
 
   private scheduleHat(time: number): void {
@@ -234,8 +258,6 @@ export class MusicEngine {
     gain.connect(this.masterGain);
     source.start(time);
     source.stop(time + this.config.hatDecay);
-
-    this.triggerHat();
   }
 
   private scheduleSnare(time: number): void {
@@ -289,8 +311,6 @@ export class MusicEngine {
       noiseGain.connect(snareSend);
       snareSend.connect(this.delaySend);
     }
-
-    this.triggerSnare();
   }
 
   // ─── Bass Voice (persistent) ──────────────────────────────────────
@@ -522,6 +542,7 @@ export class MusicEngine {
     this.nextNoteTime = 0;
     this.arpIndex = 0;
     this.pendingBPM = null;
+    this.pendingEvents = [];
   }
 
   setBPM(bpm: number): void {
@@ -549,17 +570,19 @@ export class MusicEngine {
       if (this.activeLayers >= 1 && (pos === 0 || pos === 4 || pos === 8 || pos === 12)) {
         this.scheduleKick(time);
         this.duckBass(time);
-        this.lastBeatTime = time;
+        this.pendingEvents.push({ time, type: 'kick' });
       }
 
       // Hat: every other position (8th notes) (layer >= 2)
       if (this.activeLayers >= 2 && pos % 2 === 0) {
         this.scheduleHat(time);
+        this.pendingEvents.push({ time, type: 'hat' });
       }
 
       // Snare: positions 4, 12 (layer >= 3)
       if (this.activeLayers >= 3 && (pos === 4 || pos === 12)) {
         this.scheduleSnare(time);
+        this.pendingEvents.push({ time, type: 'snare' });
       }
 
       // Bass: per bassPattern (layer >= 4)
