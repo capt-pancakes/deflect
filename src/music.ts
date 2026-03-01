@@ -72,4 +72,28 @@ export class MusicEngine {
   getBeatState(): BeatState {
     return this.beatState;
   }
+
+  triggerKick(): void {
+    this.beatState.kickIntensity = 1;
+  }
+
+  triggerSnare(): void {
+    this.beatState.snareIntensity = 1;
+  }
+
+  triggerHat(): void {
+    this.beatState.hatIntensity = 1;
+  }
+
+  update(dt: number): void {
+    const decay = this.config.intensityDecayRate * dt;
+    this.beatState.kickIntensity = Math.max(0, this.beatState.kickIntensity - decay);
+    this.beatState.snareIntensity = Math.max(0, this.beatState.snareIntensity - decay);
+    this.beatState.hatIntensity = Math.max(0, this.beatState.hatIntensity - decay);
+  }
+
+  setIntensityLevel(layers: number): void {
+    this.config.layers = layers;
+    this.beatState.visualIntensity = Math.min(1, layers / 5);
+  }
 }
