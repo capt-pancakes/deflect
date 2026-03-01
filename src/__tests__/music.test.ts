@@ -76,4 +76,16 @@ describe('MusicEngine', () => {
       expect(engine.getBeatState().visualIntensity).toBeCloseTo(1.0);
     });
   });
+
+  describe('suspend/resume', () => {
+    it('resets beat state on resume', () => {
+      const engine = new MusicEngine();
+      engine.triggerKick();
+      engine.triggerSnare();
+      engine.handleResume();
+      expect(engine.getBeatState().kickIntensity).toBe(0);
+      expect(engine.getBeatState().snareIntensity).toBe(0);
+      expect(engine.getBeatState().hatIntensity).toBe(0);
+    });
+  });
 });

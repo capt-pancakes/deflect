@@ -142,6 +142,18 @@ export class MusicEngine {
     this.beatState.hatIntensity = 1;
   }
 
+  handleResume(): void {
+    this.beatState.kickIntensity = 0;
+    this.beatState.snareIntensity = 0;
+    this.beatState.hatIntensity = 0;
+    this.beatState.beatPhase = 0;
+    // Reset scheduler timing
+    if (this.ctx) {
+      this.nextNoteTime = this.ctx.currentTime + 0.05;
+      this.lastBeatTime = this.ctx.currentTime;
+    }
+  }
+
   update(dt: number): void {
     const decay = this.config.intensityDecayRate * dt;
     this.beatState.kickIntensity = Math.max(0, this.beatState.kickIntensity - decay);
@@ -433,6 +445,12 @@ export class MusicEngine {
     this.currentSixteenth = 0;
     this.arpIndex = 0;
     this.lastBeatTime = ctx.currentTime;
+
+    ctx.addEventListener('statechange', () => {
+      if (ctx.state === 'running' && this.schedulerInterval !== null) {
+        this.handleResume();
+      }
+    });
 
     this.schedulerInterval = setInterval(
       this.schedulerTick,
