@@ -105,11 +105,13 @@ describe('SongPlayer', () => {
   });
 
   describe('setIntensityLevel', () => {
-    it('maps layer count to visualIntensity with floor of 0.5', () => {
+    it('maps layer count to visualIntensity with floor of 0.7', () => {
       player.setIntensityLevel(1);
-      expect(player.getBeatState().visualIntensity).toBeCloseTo(0.5);
+      expect(player.getBeatState().visualIntensity).toBeCloseTo(0.7);
       player.setIntensityLevel(3);
-      expect(player.getBeatState().visualIntensity).toBeCloseTo(0.6);
+      expect(player.getBeatState().visualIntensity).toBeCloseTo(0.7);
+      player.setIntensityLevel(4);
+      expect(player.getBeatState().visualIntensity).toBeCloseTo(0.8);
       player.setIntensityLevel(5);
       expect(player.getBeatState().visualIntensity).toBeCloseTo(1.0);
     });

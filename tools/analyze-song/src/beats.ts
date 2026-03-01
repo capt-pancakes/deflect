@@ -111,23 +111,78 @@ function analyzeBeatsSimple(
   // Estimate BPM from beat intervals
   const bpm = estimateBPM(beats);
 
+  // Apply positional classification using BPM grid
+  // For electronic music, bar position is a more reliable classifier
+  // than spectral content alone (since bass dominates most beats).
+  // Use spectral type as a hint, but position as the primary classifier.
+  const beatDuration = 60 / bpm;
+
+  for (const beat of beats) {
+    const beatInBar = Math.round(beat.time / beatDuration) % 4;
+    const spectralType = beat.type; // preserve spectral hint
+
+    if (beatInBar === 0) {
+      beat.type = 'downbeat';
+      beat.intensity = Math.min(1, beat.intensity * 1.2);
+    } else if (beatInBar === 2) {
+      // Position 2 is typically kick, but if spectral says hat, keep it
+      beat.type = spectralType === 'hat' ? 'hat' : 'kick';
+    } else if (beatInBar === 1 || beatInBar === 3) {
+      // Odd positions: snare/clap territory
+      beat.type = spectralType === 'hat' ? 'hat' : 'snare';
+      beat.intensity = Math.max(beat.intensity, 0.7);
+    }
+  }
+
   return { bpm, beats };
 }
 
-function classifyBeat(window: Float32Array, sampleRate: number): Beat['type'] {
-  // Simple spectral analysis: compute energy in low/mid/high bands
-  // Using a rough approximation without full FFT
-  const lowCutoff = Math.floor((300 / sampleRate) * window.length);
-  const highCutoff = Math.floor((4000 / sampleRate) * window.length);
+/**
+ * Goertzel algorithm: compute the power at a specific frequency bin k.
+ * O(N) per bin - much faster than full DFT when only a few bins are needed.
+ */
+function goertzel(samples: Float32Array, N: number, k: number): number {
+  const w = (2 * Math.PI * k) / N;
+  const coeff = 2 * Math.cos(w);
+  let s0 = 0;
+  let s1 = 0;
+  let s2 = 0;
 
+  for (let i = 0; i < N; i++) {
+    s0 = samples[i] + coeff * s1 - s2;
+    s2 = s1;
+    s1 = s0;
+  }
+
+  return s1 * s1 + s2 * s2 - coeff * s1 * s2;
+}
+
+function classifyBeat(window: Float32Array, sampleRate: number): Beat['type'] {
+  const N = window.length;
+
+  // Sample representative frequencies in each band using Goertzel
   let lowEnergy = 0;
   let midEnergy = 0;
   let highEnergy = 0;
-  for (let i = 0; i < window.length; i++) {
-    const val = window[i] * window[i];
-    if (i < lowCutoff) lowEnergy += val;
-    else if (i < highCutoff) midEnergy += val;
-    else highEnergy += val;
+
+  // Low band (kicks): 50-300 Hz
+  for (let freq = 50; freq <= 300; freq += 50) {
+    const k = (freq * N) / sampleRate;
+    lowEnergy += goertzel(window, N, k);
+  }
+
+  // Mid band (snares): 500-4000 Hz
+  for (let freq = 500; freq <= 4000; freq += 500) {
+    const k = (freq * N) / sampleRate;
+    midEnergy += goertzel(window, N, k);
+  }
+
+  // High band (hats): 5000-16000 Hz
+  for (let freq = 5000; freq <= 16000; freq += 2000) {
+    const k = (freq * N) / sampleRate;
+    if (k < N / 2) {
+      highEnergy += goertzel(window, N, k);
+    }
   }
 
   // Normalize
@@ -139,7 +194,7 @@ function classifyBeat(window: Float32Array, sampleRate: number): Beat['type'] {
   if (lowEnergy > 0.5) return 'kick';
   if (highEnergy > 0.3) return 'hat';
   if (midEnergy > 0.3) return 'snare';
-  return 'kick'; // default
+  return 'kick'; // default to kick for bass-heavy content
 }
 
 function estimateBPM(beats: Beat[]): number {

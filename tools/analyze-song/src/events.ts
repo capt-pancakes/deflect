@@ -39,20 +39,68 @@ export function detectEvents(
     }
   }
 
-  // Detect drops
+  // Detect drops and buildups (lowered threshold from 0.3 to 0.2)
   for (let i = windowSize; i < smoothed.length - 1; i++) {
     const prev = smoothed[i - windowSize];
     const curr = smoothed[i];
-    if (curr - prev > 0.3 && curr > 0.5) {
+    if (curr - prev > 0.2 && curr > 0.4) {
+      // Check for buildup: rising energy in the window before the drop
+      let buildupStart = i - windowSize;
+      let isBuildup = true;
+      for (let j = buildupStart + 1; j < i; j++) {
+        if (smoothed[j] < smoothed[j - 1] - 0.02) {
+          isBuildup = false;
+          break;
+        }
+      }
+
+      // Add buildup event if energy was rising before the drop
+      if (isBuildup && buildupStart > 0) {
+        const buildupTime = energy[Math.max(0, buildupStart)].time;
+        const buildupDuration = energy[i].time - buildupTime;
+        if (buildupDuration > 1) {
+          events.push({
+            time: buildupTime,
+            type: 'buildup',
+            duration: buildupDuration,
+          });
+        }
+      }
+
+      // Add drop event
       let dropEnd = i;
       while (dropEnd < smoothed.length && smoothed[dropEnd] > curr * 0.7)
         dropEnd++;
+      const dropTime = energy[i].time;
+      const dropDuration = energy[Math.min(dropEnd, energy.length - 1)].time - dropTime;
       events.push({
-        time: energy[i].time,
+        time: dropTime,
         type: 'drop',
-        duration:
-          energy[Math.min(dropEnd, energy.length - 1)].time - energy[i].time,
+        duration: dropDuration,
       });
+
+      // Check for breakdown: sustained low energy after the drop
+      if (dropEnd < smoothed.length) {
+        let breakdownEnd = dropEnd;
+        while (
+          breakdownEnd < smoothed.length &&
+          smoothed[breakdownEnd] < smoothed[dropEnd] * 1.3 &&
+          smoothed[breakdownEnd] < 0.4
+        ) {
+          breakdownEnd++;
+        }
+        const breakdownDuration =
+          energy[Math.min(breakdownEnd, energy.length - 1)].time -
+          energy[Math.min(dropEnd, energy.length - 1)].time;
+        if (breakdownDuration > 2) {
+          events.push({
+            time: energy[Math.min(dropEnd, energy.length - 1)].time,
+            type: 'breakdown',
+            duration: breakdownDuration,
+          });
+        }
+      }
+
       i = dropEnd;
     }
   }
