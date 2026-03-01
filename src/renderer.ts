@@ -2,6 +2,7 @@ import type { Signal, Deflector, Port, Vec2, SignalColor, GameState, GameMode, F
 import { COLORS, COLOR_GLOW } from './types';
 import { normalize, sub, vec2 } from './math';
 import type { ParticleSystem } from './particles';
+import type { BeatState } from './music';
 
 // ---- Font constants ----
 
@@ -74,6 +75,9 @@ export interface RenderableGameState {
   floatingTexts: readonly FloatingText[];
   nearMissRings: readonly NearMissRing[];
   particles: ParticleSystem;
+  music: {
+    getBeatState(): BeatState;
+  };
   scoring: {
     score: number;
     combo: number;
