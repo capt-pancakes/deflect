@@ -34,6 +34,7 @@ import type { CollisionEvent } from './collision';
 import { TutorialManager } from './tutorial';
 import { Renderer } from './renderer';
 import { audio } from './audio';
+import { MusicEngine } from './music';
 import { generateScoreCard, shareScore } from './share';
 
 export class Game {
@@ -107,6 +108,9 @@ export class Game {
   nearMissTimeout: ReturnType<typeof setTimeout> | null = null;
   DEFLECTOR_COOLDOWN = 0.2; // 200ms minimum between deflectors
 
+  // Music
+  music = new MusicEngine();
+
   // Collision detection
   collisions: CollisionSystem;
 
@@ -148,6 +152,7 @@ export class Game {
       }
     } else if (this.state === 'gameover') {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+        this.music.stop();
         this.state = 'menu';
       }
     }
@@ -192,6 +197,7 @@ export class Game {
       this.nearMissTimeout = null;
     }
     this.particles.clear();
+    this.music.stop();
     audio.destroy();
   }
 
@@ -278,6 +284,7 @@ export class Game {
     this.ports = [];
     this.setupPorts();
     audio.start();
+    this.music.start();
 
     // Spawn first signal for tutorial
     if (this.tutorial.phase === 1) {
@@ -338,6 +345,7 @@ export class Game {
     this.updateDeflectors(scaledDt);
     this.checkCollisions();
     this.particles.update(scaledDt);
+    this.music.update(scaledDt);
     this.updateShake(scaledDt);
     this.updateFloatingTexts(scaledDt);
     this.updateNearMissRings(scaledDt);
@@ -474,9 +482,11 @@ export class Game {
         this.handleShare();
         return;
       }
+      this.music.stop();
       this.state = 'menu';
     }
     if (this.input.consumeSwipe()) {
+      this.music.stop();
       this.state = 'menu';
     }
   }
@@ -518,6 +528,14 @@ export class Game {
         );
       }
     }
+
+    // Map difficulty to music layers
+    const musicLayers = this.difficulty.activeColors + 1; // 1 color = 2 layers (kick+hat), 2 = 3, 3 = 4, 4 = 5
+    this.music.setIntensityLevel(musicLayers);
+
+    // Map elapsed time to BPM: 110 → 140 over 90s
+    const bpm = Math.min(140, 110 + (this.elapsed / 90) * 30);
+    this.music.setBPM(bpm);
   }
 
   handleInput() {
@@ -788,6 +806,7 @@ export class Game {
     }
 
     audio.gameOver();
+    this.music.stop();
 
     if (this.scoring.finalizeScores(this.mode)) {
       this.scoring.saveHighScores(this.mode, this.dailySeedValue);

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock the audio module before importing Game
 vi.mock('../audio', () => ({
+  getCtx: vi.fn(() => null),
   audio: {
     init: vi.fn(),
     start: vi.fn(),
