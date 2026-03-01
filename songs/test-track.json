@@ -1,0 +1,29 @@
+{
+  "title": "Test Track",
+  "artist": "DEFLECT",
+  "duration": 30,
+  "bpm": 128,
+  "bpmSections": [{ "time": 0, "bpm": 128 }],
+  "beats": [
+    { "time": 0.000, "type": "kick", "intensity": 1.0 },
+    { "time": 0.234, "type": "hat", "intensity": 0.5 },
+    { "time": 0.469, "type": "snare", "intensity": 0.8 },
+    { "time": 0.703, "type": "hat", "intensity": 0.5 },
+    { "time": 0.938, "type": "kick", "intensity": 1.0 },
+    { "time": 1.172, "type": "hat", "intensity": 0.5 },
+    { "time": 1.406, "type": "snare", "intensity": 0.8 },
+    { "time": 1.641, "type": "hat", "intensity": 0.5 },
+    { "time": 1.875, "type": "kick", "intensity": 1.0 }
+  ],
+  "energy": [
+    { "time": 0.0, "low": 0.8, "mid": 0.3, "high": 0.2, "total": 0.5 },
+    { "time": 0.5, "low": 0.3, "mid": 0.5, "high": 0.6, "total": 0.4 },
+    { "time": 1.0, "low": 0.9, "mid": 0.4, "high": 0.1, "total": 0.6 },
+    { "time": 1.5, "low": 0.7, "mid": 0.3, "high": 0.3, "total": 0.5 }
+  ],
+  "events": [
+    { "time": 0, "type": "intro", "duration": 4 },
+    { "time": 15, "type": "drop", "duration": 12 },
+    { "time": 27, "type": "outro", "duration": 3 }
+  ]
+}
