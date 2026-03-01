@@ -42,10 +42,12 @@ export class SongPlayer {
 
   start(mp3Url: string, songData: SongData): void {
     this.loadSongData(songData);
-    this.audio = new Audio(mp3Url);
-    this.audio.play().catch(() => {
-      // Autoplay may be blocked; will resume on user interaction
-    });
+    if (typeof Audio !== 'undefined') {
+      this.audio = new Audio(mp3Url);
+      this.audio.play().catch(() => {
+        // Autoplay may be blocked; will resume on user interaction
+      });
+    }
   }
 
   stop(): void {

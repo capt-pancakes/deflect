@@ -35,6 +35,8 @@ import { TutorialManager } from './tutorial';
 import { Renderer } from './renderer';
 import { audio } from './audio';
 import { SongPlayer } from './song-player';
+import type { SongData } from './song-data';
+import neonOverdrive from '../songs/Neon-Overdrive.json';
 import { generateScoreCard, shareScore } from './share';
 
 export class Game {
@@ -284,8 +286,7 @@ export class Game {
     this.ports = [];
     this.setupPorts();
     audio.start();
-    // Song data will be loaded when MP3+JSON pairs are available
-    // For now, SongPlayer runs without song data (returns zero BeatState)
+    this.music.start('songs/Neon-Overdrive.mp3', neonOverdrive as SongData);
 
     // Spawn first signal for tutorial
     if (this.tutorial.phase === 1) {
