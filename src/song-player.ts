@@ -24,7 +24,6 @@ export class SongPlayer {
 
   // Index tracking for O(1) per-frame advancement
   private beatIndex = 0;
-  private energyIndex = 0;
   private currentTime = 0;
 
   // Audio element for playback (null in tests)
@@ -38,7 +37,6 @@ export class SongPlayer {
     this.songData = data;
     this.beatState.bpm = data.bpm;
     this.beatIndex = 0;
-    this.energyIndex = 0;
     this.currentTime = 0;
   }
 
@@ -61,7 +59,6 @@ export class SongPlayer {
     this.beatState.hatIntensity = 0;
     this.beatState.beatPhase = 0;
     this.beatIndex = 0;
-    this.energyIndex = 0;
     this.currentTime = 0;
   }
 
