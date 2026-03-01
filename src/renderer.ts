@@ -93,6 +93,7 @@ export interface RenderableGameState {
     getBeatState(): BeatState;
     getCurrentEvent(): SongEvent | null;
     getCurrentEnergy(): EnergyFrame | null;
+    getFrequencyData(): Float32Array;
   };
   scoring: {
     score: number;
@@ -300,7 +301,6 @@ export class Renderer {
 
   private renderGame(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
     const beatState = game.music.getBeatState();
-    const vi = beatState.visualIntensity;
     const dt = game.dt;
 
     // Section multiplier (Phase 4.1)
@@ -322,43 +322,7 @@ export class Renderer {
     this.prevEventType = eventType;
     this.dropFlash = Math.max(0, this.dropFlash - dt * 3);
 
-    // Energy-driven background brightness (Phase 4.3)
-    const energy = game.music.getCurrentEnergy();
-    if (!game.reducedMotion && energy) {
-      const bgBright = Math.floor(10 + energy.total * 8);
-      ctx.fillStyle = `rgb(${bgBright}, ${bgBright}, ${Math.floor(bgBright * 1.5 + 10)})`;
-      ctx.fillRect(-10, -10, game.width + 20, game.height + 20);
-    }
-
-    // Radial background pulse on kicks (Phase 2.3)
-    if (!game.reducedMotion && beatState.kickIntensity > 0.1) {
-      const pulseAlpha = beatState.kickIntensity * 0.12 * vi * sectionMul;
-      const gradient = ctx.createRadialGradient(
-        game.centerX, game.centerY, 0,
-        game.centerX, game.centerY, game.arenaRadius * 1.2,
-      );
-      gradient.addColorStop(0, `rgba(60, 60, 140, ${pulseAlpha})`);
-      gradient.addColorStop(1, 'rgba(60, 60, 140, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, game.width, game.height);
-    }
-
     this.renderArenaRing(ctx, game, 0.12, beatState);
-
-    // Screen flash: amplified (Phase 1.3) + color warmth + section multiplier
-    if (!game.reducedMotion && beatState.kickIntensity > 0) {
-      const flashAlpha = beatState.kickIntensity * 0.18 * vi * sectionMul;
-      const warmth = Math.round(beatState.kickIntensity * 20);
-      ctx.fillStyle = `rgba(${40 + warmth}, ${40 + warmth}, 80, ${flashAlpha})`;
-      ctx.fillRect(0, 0, game.width, game.height);
-    }
-
-    // Hat-driven background color temperature shift (Phase 2.1)
-    if (!game.reducedMotion && beatState.hatIntensity > 0.1) {
-      const hatAlpha = beatState.hatIntensity * 0.04 * vi;
-      ctx.fillStyle = `rgba(80, 60, 120, ${hatAlpha})`;
-      ctx.fillRect(0, 0, game.width, game.height);
-    }
 
     // Beat ring ripples (Phase 2.3) - spawn on strong kicks
     if (!game.reducedMotion && beatState.kickIntensity > 0.5 && this.prevKickIntensity <= 0.5) {
@@ -420,27 +384,37 @@ export class Renderer {
 
     this.renderSignals(ctx, game, beatState);
 
-    // Ambient beat particles (Phase 2.3): arena-edge on kicks, radial on snares
+    // Beat particles: spawn anywhere outside the arena across the full visual area
     if (!game.reducedMotion) {
-      if (beatState.kickIntensity > 0.6 && this.prevKickIntensity <= 0.6) {
-        const count = Math.floor(3 * sectionMul);
+      const isStrongKick = beatState.kickIntensity > 0.6 && this.prevKickIntensity <= 0.6;
+      const isDrop = sectionMul > 1.5;
+
+      if (isStrongKick && isDrop) {
+        const portColor = game.ports.length > 0
+          ? COLORS[game.ports[Math.floor(Math.random() * game.ports.length)].color]
+          : '#6688ff';
+        const count = 15 + Math.floor(Math.random() * 10);
         for (let i = 0; i < count; i++) {
-          const angle = Math.random() * Math.PI * 2;
           const pos = {
-            x: game.centerX + Math.cos(angle) * game.arenaRadius,
-            y: game.centerY + Math.sin(angle) * game.arenaRadius,
+            x: Math.random() * game.width,
+            y: Math.random() * game.height,
+          };
+          game.particles.burst(pos, portColor, 1, 80 + Math.random() * 80, 0.6);
+        }
+      } else if (isStrongKick) {
+        for (let i = 0; i < 4; i++) {
+          const pos = {
+            x: Math.random() * game.width,
+            y: Math.random() * game.height,
           };
           game.particles.trail(pos, 'rgba(100, 140, 255, 0.8)', 2);
         }
       }
       if (beatState.snareIntensity > 0.5) {
-        const count = Math.floor(2 * sectionMul);
-        for (let i = 0; i < count; i++) {
-          const angle = Math.random() * Math.PI * 2;
-          const r = game.arenaRadius * (0.3 + Math.random() * 0.5);
+        for (let i = 0; i < 3; i++) {
           const pos = {
-            x: game.centerX + Math.cos(angle) * r,
-            y: game.centerY + Math.sin(angle) * r,
+            x: Math.random() * game.width,
+            y: Math.random() * game.height,
           };
           game.particles.trail(pos, 'rgba(200, 160, 255, 0.6)', 1);
         }
@@ -507,9 +481,16 @@ export class Renderer {
       ? beatState.hatIntensity * 6 * beatState.visualIntensity
       : 0;
 
-    for (const port of game.ports) {
+    // Get frequency data for spectrum bars
+    const freqData = game.music.getFrequencyData();
+    const numPorts = game.ports.length;
+    const binsPerPort = numPorts > 0 ? Math.floor(freqData.length / numPorts) : 0;
+
+    for (let portIdx = 0; portIdx < game.ports.length; portIdx++) {
+      const port = game.ports[portIdx];
       const color = COLORS[port.color];
       const glow = COLOR_GLOW[port.color];
+      const [cr, cg, cb] = hexToRgb(color);
 
       // Check if any matching signal is heading toward this port (hungry indicator)
       let isHungry = false;
@@ -539,9 +520,41 @@ export class Renderer {
       ctx.arc(game.centerX, game.centerY, game.arenaRadius, port.angleStart, port.angleEnd);
       ctx.stroke();
 
+      // Spectrum bars radiating outward from the port arc
+      if (!game.reducedMotion && binsPerPort > 0) {
+        const arcSpan = port.angleEnd - port.angleStart;
+        const barsToRender = Math.min(binsPerPort, 20);
+        const barAngularWidth = arcSpan / (barsToRender + 1);
+        const startBin = portIdx * binsPerPort;
+        const hungerBoost = isHungry ? 1.3 : 1.0;
+
+        ctx.lineCap = 'butt';
+        for (let b = 0; b < barsToRender; b++) {
+          const binIdx = startBin + Math.floor(b * binsPerPort / barsToRender);
+          const value = freqData[binIdx] * hungerBoost;
+          if (value < 0.02) continue;
+
+          const angle = port.angleStart + (b + 1) * barAngularWidth;
+          const barHeight = 3 + value * 22;
+          const innerR = game.arenaRadius + 2;
+          const outerR = innerR + barHeight;
+
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+
+          const alpha = 0.3 + value * 0.7;
+          ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha})`;
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(game.centerX + cos * innerR, game.centerY + sin * innerR);
+          ctx.lineTo(game.centerX + cos * outerR, game.centerY + sin * outerR);
+          ctx.stroke();
+        }
+      }
+
       // Port icon (colored circle with label outside arena)
       const midAngle = (port.angleStart + port.angleEnd) / 2;
-      const labelR = game.arenaRadius + 22;
+      const labelR = game.arenaRadius + 42; // pushed out to clear spectrum bars
       const lx = game.centerX + Math.cos(midAngle) * labelR;
       const ly = game.centerY + Math.sin(midAngle) * labelR;
 
@@ -581,10 +594,28 @@ export class Renderer {
     }
   }
 
+  /** Smoothed core radius for bass thump (exponential decay) */
+  private coreThumpRadius = 0;
+
   private renderCore(ctx: CanvasRenderingContext2D, game: RenderableGameState, beatState?: BeatState): void {
-    const r = game.config.coreRadius;
-    const kickBoost = beatState && !game.reducedMotion ? beatState.kickIntensity * 4 * beatState.visualIntensity : 0;
-    const pulse = Math.sin(game.corePulse) * 6 + kickBoost;
+    const baseR = game.config.coreRadius;
+    const dt = game.dt;
+
+    // Bass thump: kick drives a physical scale pulse
+    const decayFactor = Math.pow(0.85, dt * 60);
+    if (beatState && !game.reducedMotion) {
+      const kickTarget = beatState.kickIntensity * 12 * beatState.visualIntensity;
+      if (kickTarget > this.coreThumpRadius) {
+        this.coreThumpRadius = kickTarget;
+      } else {
+        this.coreThumpRadius *= decayFactor;
+        if (this.coreThumpRadius < 0.5) this.coreThumpRadius = 0;
+      }
+    } else {
+      this.coreThumpRadius *= decayFactor;
+    }
+
+    const r = baseR + this.coreThumpRadius;
 
     // Damage flash ring
     if (game.coreDamageFlash > 0) {
@@ -615,20 +646,21 @@ export class Renderer {
 
     // Core glow
     ctx.shadowColor = glowColor;
-    ctx.shadowBlur = 15 + pulse;
+    ctx.shadowBlur = 15 + this.coreThumpRadius;
 
     ctx.fillStyle = '#1a1a2e';
     ctx.strokeStyle = glowColor;
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(game.centerX, game.centerY, r + pulse, 0, Math.PI * 2);
+    ctx.arc(game.centerX, game.centerY, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // HP pips
+    // HP pips (scale with core thump)
     if (game.mode !== 'zen') {
-      const dotSpacing = 12;
+      const pipScale = 1 + this.coreThumpRadius / baseR * 0.3;
+      const dotSpacing = 12 * pipScale;
       const startX = game.centerX - ((game.coreMaxHP - 1) * dotSpacing) / 2;
       for (let i = 0; i < game.coreMaxHP; i++) {
         const active = i < game.coreHP;
@@ -638,7 +670,7 @@ export class Renderer {
           ctx.shadowBlur = 4;
         }
         ctx.beginPath();
-        ctx.arc(startX + i * dotSpacing, game.centerY, active ? 3.5 : 2.5, 0, Math.PI * 2);
+        ctx.arc(startX + i * dotSpacing, game.centerY, (active ? 3.5 : 2.5) * pipScale, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       }
