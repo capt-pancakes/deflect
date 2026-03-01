@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { MusicEngine, DEFAULT_MUSIC_CONFIG } from '../music';
 
+describe('setBPM', () => {
+  it('queues BPM change for next bar boundary', () => {
+    const engine = new MusicEngine({ bpm: 110 });
+    engine.setBPM(130);
+    expect(engine.getBeatState().bpm).toBe(110);
+  });
+});
+
 describe('MusicEngine', () => {
   describe('config', () => {
     it('has sensible defaults', () => {
