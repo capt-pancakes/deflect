@@ -38,6 +38,7 @@ import { SongPlayer } from './song-player';
 import type { SongData } from './song-data';
 import neonOverdrive from '../songs/Neon-Overdrive.json';
 import { generateScoreCard, shareScore } from './share';
+import { track } from './analytics';
 
 export class Game {
   canvas: HTMLCanvasElement;
@@ -289,6 +290,7 @@ export class Game {
     this.setupPorts();
     audio.start();
     this.music.start('songs/Neon-Overdrive.mp3', neonOverdrive as SongData);
+    track('game_start', { mode });
 
     // Spawn first signal for tutorial
     if (this.tutorial.phase === 1) {
@@ -515,6 +517,7 @@ export class Game {
   }
 
   async handleShare() {
+    track('share_initiated', { mode: this.mode, score: this.scoring.score });
     try {
       const card = generateScoreCard({
         score: this.scoring.score,
@@ -826,6 +829,7 @@ export class Game {
 
     audio.gameOver();
     this.music.stop();
+    track('game_over', { mode: this.mode, score: this.scoring.score, elapsed: Math.floor(this.elapsed), maxCombo: this.scoring.maxCombo });
 
     if (this.scoring.finalizeScores(this.mode)) {
       this.scoring.saveHighScores(this.mode, this.dailySeedValue);
