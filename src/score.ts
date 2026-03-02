@@ -14,6 +14,7 @@ export class ScoreManager {
   highScore = 0;
   dailyBest = 0;
   hasPlayedBefore = false;
+  modeBests: Record<'arcade' | 'zen' | 'daily', number> = { arcade: 0, zen: 0, daily: 0 };
 
   dailyStreak = 0;
   private _streakLastDate = '';
@@ -69,6 +70,10 @@ export class ScoreManager {
       this.dailyBest = this.score;
       changed = true;
     }
+    if (this.score > this.modeBests[mode]) {
+      this.modeBests[mode] = this.score;
+      changed = true;
+    }
     return changed;
   }
 
@@ -100,6 +105,11 @@ export class ScoreManager {
         ) {
           this.dailyBest = d.score;
         }
+      }
+      // Load per-mode bests
+      for (const mode of ['arcade', 'zen', 'daily'] as const) {
+        const raw = parseInt(localStorage.getItem(`deflect_best_${mode}`) || '0', 10);
+        this.modeBests[mode] = Number.isFinite(raw) ? raw : 0;
       }
     } catch {}
   }
@@ -156,6 +166,10 @@ export class ScoreManager {
             score: this.dailyBest,
           }),
         );
+      }
+      // Persist per-mode bests
+      for (const m of ['arcade', 'zen', 'daily'] as const) {
+        localStorage.setItem(`deflect_best_${m}`, String(this.modeBests[m]));
       }
     } catch {}
   }

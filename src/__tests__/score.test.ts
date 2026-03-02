@@ -132,6 +132,7 @@ describe('ScoreManager', () => {
 
     it('does not update highScore if current score is lower', () => {
       sm.highScore = 1000;
+      sm.modeBests.arcade = 1000;
       sm.score = 500;
       const changed = sm.finalizeScores('arcade');
       expect(changed).toBe(false);
@@ -355,6 +356,63 @@ describe('ScoreManager', () => {
       sm.loadDailyStreak();
       expect(sm.dailyStreak).toBe(0);
       vi.unstubAllGlobals();
+    });
+  });
+
+  describe('per-mode bests', () => {
+    it('starts with zeroed modeBests', () => {
+      expect(sm.modeBests).toEqual({ arcade: 0, zen: 0, daily: 0 });
+    });
+
+    it('finalizeScores updates modeBests for arcade', () => {
+      sm.score = 500;
+      sm.finalizeScores('arcade');
+      expect(sm.modeBests.arcade).toBe(500);
+    });
+
+    it('finalizeScores updates modeBests for zen', () => {
+      sm.score = 300;
+      sm.finalizeScores('zen');
+      expect(sm.modeBests.zen).toBe(300);
+    });
+
+    it('finalizeScores does not downgrade modeBests', () => {
+      sm.modeBests.arcade = 1000;
+      sm.score = 500;
+      sm.finalizeScores('arcade');
+      expect(sm.modeBests.arcade).toBe(1000);
+    });
+
+    it('loadHighScores loads per-mode bests from localStorage', () => {
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((key: string) => {
+          if (key === 'deflect_best_arcade') return '1200';
+          if (key === 'deflect_best_zen') return '800';
+          if (key === 'deflect_best_daily') return '600';
+          return null;
+        }),
+        setItem: vi.fn(),
+      });
+      sm.loadHighScores();
+      expect(sm.modeBests).toEqual({ arcade: 1200, zen: 800, daily: 600 });
+      vi.unstubAllGlobals();
+    });
+
+    it('saveHighScores persists per-mode bests', () => {
+      const setItem = vi.fn();
+      vi.stubGlobal('localStorage', { getItem: vi.fn(), setItem });
+      sm.modeBests = { arcade: 1200, zen: 800, daily: 600 };
+      sm.saveHighScores('arcade', 0);
+      expect(setItem).toHaveBeenCalledWith('deflect_best_arcade', '1200');
+      expect(setItem).toHaveBeenCalledWith('deflect_best_zen', '800');
+      expect(setItem).toHaveBeenCalledWith('deflect_best_daily', '600');
+      vi.unstubAllGlobals();
+    });
+
+    it('reset preserves modeBests', () => {
+      sm.modeBests.arcade = 1000;
+      sm.reset();
+      expect(sm.modeBests.arcade).toBe(1000);
     });
   });
 });
