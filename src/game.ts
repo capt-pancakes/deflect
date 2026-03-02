@@ -122,6 +122,14 @@ export class Game {
   // Constants
   PORT_MAGNETISM = 0.25; // Reduced: How strongly ports pull matching signals
 
+  // Mute button position
+  muteButtonX = 0;
+  muteButtonY = 0;
+
+  get isMuted(): boolean {
+    return audio.isMuted();
+  }
+
   // Accessibility: reduced motion preference
   reducedMotion = false;
   private motionQuery: MediaQueryList | null = null;
@@ -186,6 +194,7 @@ export class Game {
     window.addEventListener('keydown', this.onKeyDown);
 
     this.scoring.loadHighScores();
+    audio.loadMuteState();
     this.resize();
     window.addEventListener('resize', this.onResize);
   }
@@ -204,6 +213,11 @@ export class Game {
     this.particles.clear();
     this.music.stop();
     audio.destroy();
+  }
+
+  private toggleMute(): void {
+    audio.toggleMute();
+    this.music.setMuted(audio.isMuted());
   }
 
   resize() {
@@ -443,6 +457,9 @@ export class Game {
   }
 
   updateMenu(dt: number) {
+    this.muteButtonX = this.width - 40;
+    this.muteButtonY = 24;
+
     this.particles.update(dt);
     if (Math.random() < dt * 3) {
       const angle = Math.random() * Math.PI * 2;
@@ -455,6 +472,15 @@ export class Game {
     const tapPos = this.input.consumeTapWithPos();
     if (tapPos) {
       audio.init();
+
+      // Check mute button hit first
+      const dx = tapPos.x - this.muteButtonX;
+      const dy = tapPos.y - this.muteButtonY;
+      if (dx * dx + dy * dy < 16 * 16) {
+        this.toggleMute();
+        return;
+      }
+
       // Check button hits
       const buttons = this.getMenuButtons();
       const btnW = Math.min(this.width * 0.55, 200);

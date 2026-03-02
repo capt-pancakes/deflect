@@ -135,6 +135,9 @@ export interface RenderableGameState {
   menuPulse: number;
   shareMessage: string;
   shareMessageTimer: number;
+  isMuted: boolean;
+  muteButtonX: number;
+  muteButtonY: number;
   reducedMotion: boolean;
   getMenuButtons(): MenuButton[];
   input: { getActiveSwipe(): ActiveSwipe | null };
@@ -270,6 +273,8 @@ export class Renderer {
       ctx.font = fontString(Math.min(game.width * 0.035, 14));
       ctx.fillText(`BEST: ${game.scoring.highScore}`, game.centerX, game.centerY + 180);
     }
+
+    this.renderMuteButton(ctx, game);
   }
 
   private renderArenaRing(
@@ -840,6 +845,14 @@ export class Renderer {
       ctx.fillText('DAILY', game.width - 15, 20);
     }
 
+    // Muted indicator during gameplay
+    if (game.isMuted) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ff4466';
+      ctx.font = fontString(Math.min(game.width * 0.03, 12), true);
+      ctx.fillText('MUTED', game.width - 15, 38);
+    }
+
     // Slow-mo indicator
     if (game.timeScale < 0.8) {
       ctx.textAlign = 'center';
@@ -952,5 +965,18 @@ export class Renderer {
     ctx.fillStyle = `rgba(255, 255, 255, ${tapAlpha})`;
     ctx.font = font(0.035);
     ctx.fillText('TAP TO CONTINUE', game.centerX, game.height - 60);
+  }
+
+  private renderMuteButton(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+    const x = game.muteButtonX;
+    const y = game.muteButtonY;
+    const label = game.isMuted ? 'MUTE' : 'SND';
+    const color = game.isMuted ? '#ff4466' : '#8888aa';
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.font = fontString(Math.min(game.width * 0.03, 12), true);
+    ctx.fillText(label, x, y);
   }
 }
