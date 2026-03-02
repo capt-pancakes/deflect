@@ -155,7 +155,10 @@ export class Game {
           break;
       }
     } else if (this.state === 'gameover') {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+      if (e.key === 'r' || e.key === 'R' || e.key === 'Enter' || e.key === ' ') {
+        this.music.stop();
+        this.startGame(this.mode);
+      } else if (e.key === 'Escape') {
         this.music.stop();
         this.state = 'menu';
       }
@@ -435,8 +438,8 @@ export class Game {
     const baseY = this.centerY + 60;
     return [
       { label: 'ARCADE', mode: 'arcade', y: baseY, color: '#4488ff' },
-      { label: 'ZEN', mode: 'zen', y: baseY + 52, color: '#44ff88' },
-      { label: 'DAILY', mode: 'daily', y: baseY + 104, color: '#ffcc44' },
+      { label: 'ZEN', mode: 'zen', y: baseY + 58, color: '#44ff88' },
+      { label: 'DAILY', mode: 'daily', y: baseY + 116, color: '#ffcc44' },
     ];
   }
 
@@ -492,21 +495,50 @@ export class Game {
     const tapPos = this.input.consumeTapWithPos();
     if (tapPos) {
       // Check share button hit
-      const btnW = Math.min(this.width * 0.4, 160);
-      const btnH = 38;
-      const btnX = this.centerX - btnW / 2;
-      const btnY = this.renderer.shareButtonY - btnH / 2;
+      const shareBtnW = Math.min(this.width * 0.4, 160);
+      const shareBtnH = 38;
+      const shareBtnX = this.centerX - shareBtnW / 2;
+      const shareBtnY = this.renderer.shareButtonY - shareBtnH / 2;
       if (
-        tapPos.x >= btnX &&
-        tapPos.x <= btnX + btnW &&
-        tapPos.y >= btnY &&
-        tapPos.y <= btnY + btnH
+        tapPos.x >= shareBtnX &&
+        tapPos.x <= shareBtnX + shareBtnW &&
+        tapPos.y >= shareBtnY &&
+        tapPos.y <= shareBtnY + shareBtnH
       ) {
         this.handleShare();
         return;
       }
-      this.music.stop();
-      this.state = 'menu';
+
+      // Check retry button hit (left button)
+      const btnW = Math.min(this.width * 0.35, 140);
+      const btnH = 38;
+      const gap = 12;
+      const totalW = btnW * 2 + gap;
+      const leftX = this.centerX - totalW / 2;
+      const retryY = this.renderer.retryButtonY;
+      if (
+        tapPos.x >= leftX &&
+        tapPos.x <= leftX + btnW &&
+        tapPos.y >= retryY - btnH / 2 &&
+        tapPos.y <= retryY + btnH / 2
+      ) {
+        this.music.stop();
+        this.startGame(this.mode);
+        return;
+      }
+
+      // Check menu button hit (right button)
+      const rightX = leftX + btnW + gap;
+      if (
+        tapPos.x >= rightX &&
+        tapPos.x <= rightX + btnW &&
+        tapPos.y >= retryY - btnH / 2 &&
+        tapPos.y <= retryY + btnH / 2
+      ) {
+        this.music.stop();
+        this.state = 'menu';
+        return;
+      }
     }
     if (this.input.consumeSwipe()) {
       this.music.stop();
