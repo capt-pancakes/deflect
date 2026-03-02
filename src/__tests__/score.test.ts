@@ -132,6 +132,7 @@ describe('ScoreManager', () => {
 
     it('does not update highScore if current score is lower', () => {
       sm.highScore = 1000;
+      sm.modeBests.arcade = 1000;
       sm.score = 500;
       const changed = sm.finalizeScores('arcade');
       expect(changed).toBe(false);
@@ -275,6 +276,143 @@ describe('ScoreManager', () => {
       expect(() => sm.saveHighScores('arcade', 0)).not.toThrow();
 
       vi.unstubAllGlobals();
+    });
+  });
+
+  describe('daily streak', () => {
+    it('starts with zero streak', () => {
+      expect(sm.dailyStreak).toBe(0);
+    });
+
+    it('updateDailyStreak sets streak to 1 on first daily play', () => {
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(1);
+    });
+
+    it('updateDailyStreak increments when last play was yesterday', () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      sm['_streakLastDate'] = yesterday.toISOString().split('T')[0];
+      sm.dailyStreak = 3;
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(4);
+    });
+
+    it('updateDailyStreak does not increment when already played today', () => {
+      const today = new Date().toISOString().split('T')[0];
+      sm['_streakLastDate'] = today;
+      sm.dailyStreak = 3;
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(3);
+    });
+
+    it('updateDailyStreak resets when last play was 2+ days ago', () => {
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      sm['_streakLastDate'] = twoDaysAgo.toISOString().split('T')[0];
+      sm.dailyStreak = 5;
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(1);
+    });
+
+    it('saveDailyStreak persists to localStorage', () => {
+      const setItem = vi.fn();
+      vi.stubGlobal('localStorage', { getItem: vi.fn(), setItem });
+      sm.dailyStreak = 3;
+      sm['_streakLastDate'] = new Date().toISOString().split('T')[0];
+      sm.saveDailyStreak();
+      const call = setItem.mock.calls.find((c: string[]) => c[0] === 'deflect_streak');
+      expect(call).toBeDefined();
+      const saved = JSON.parse(call![1]);
+      expect(saved.count).toBe(3);
+      expect(saved.lastDate).toBe(new Date().toISOString().split('T')[0]);
+      vi.unstubAllGlobals();
+    });
+
+    it('loadDailyStreak restores streak from localStorage', () => {
+      const today = new Date().toISOString().split('T')[0];
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((key: string) => {
+          if (key === 'deflect_streak') return JSON.stringify({ lastDate: today, count: 7 });
+          return null;
+        }),
+        setItem: vi.fn(),
+      });
+      sm.loadDailyStreak();
+      expect(sm.dailyStreak).toBe(7);
+      vi.unstubAllGlobals();
+    });
+
+    it('loadDailyStreak resets if last play was 2+ days ago', () => {
+      const old = new Date();
+      old.setDate(old.getDate() - 3);
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((key: string) => {
+          if (key === 'deflect_streak') return JSON.stringify({ lastDate: old.toISOString().split('T')[0], count: 7 });
+          return null;
+        }),
+        setItem: vi.fn(),
+      });
+      sm.loadDailyStreak();
+      expect(sm.dailyStreak).toBe(0);
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('per-mode bests', () => {
+    it('starts with zeroed modeBests', () => {
+      expect(sm.modeBests).toEqual({ arcade: 0, zen: 0, daily: 0 });
+    });
+
+    it('finalizeScores updates modeBests for arcade', () => {
+      sm.score = 500;
+      sm.finalizeScores('arcade');
+      expect(sm.modeBests.arcade).toBe(500);
+    });
+
+    it('finalizeScores updates modeBests for zen', () => {
+      sm.score = 300;
+      sm.finalizeScores('zen');
+      expect(sm.modeBests.zen).toBe(300);
+    });
+
+    it('finalizeScores does not downgrade modeBests', () => {
+      sm.modeBests.arcade = 1000;
+      sm.score = 500;
+      sm.finalizeScores('arcade');
+      expect(sm.modeBests.arcade).toBe(1000);
+    });
+
+    it('loadHighScores loads per-mode bests from localStorage', () => {
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((key: string) => {
+          if (key === 'deflect_best_arcade') return '1200';
+          if (key === 'deflect_best_zen') return '800';
+          if (key === 'deflect_best_daily') return '600';
+          return null;
+        }),
+        setItem: vi.fn(),
+      });
+      sm.loadHighScores();
+      expect(sm.modeBests).toEqual({ arcade: 1200, zen: 800, daily: 600 });
+      vi.unstubAllGlobals();
+    });
+
+    it('saveHighScores persists per-mode bests', () => {
+      const setItem = vi.fn();
+      vi.stubGlobal('localStorage', { getItem: vi.fn(), setItem });
+      sm.modeBests = { arcade: 1200, zen: 800, daily: 600 };
+      sm.saveHighScores('arcade', 0);
+      expect(setItem).toHaveBeenCalledWith('deflect_best_arcade', '1200');
+      expect(setItem).toHaveBeenCalledWith('deflect_best_zen', '800');
+      expect(setItem).toHaveBeenCalledWith('deflect_best_daily', '600');
+      vi.unstubAllGlobals();
+    });
+
+    it('reset preserves modeBests', () => {
+      sm.modeBests.arcade = 1000;
+      sm.reset();
+      expect(sm.modeBests.arcade).toBe(1000);
     });
   });
 });

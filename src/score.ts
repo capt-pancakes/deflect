@@ -14,6 +14,10 @@ export class ScoreManager {
   highScore = 0;
   dailyBest = 0;
   hasPlayedBefore = false;
+  modeBests: Record<'arcade' | 'zen' | 'daily', number> = { arcade: 0, zen: 0, daily: 0 };
+
+  dailyStreak = 0;
+  private _streakLastDate = '';
 
   /** Increment combo, add points, return points earned. */
   addCatch(): number {
@@ -66,6 +70,10 @@ export class ScoreManager {
       this.dailyBest = this.score;
       changed = true;
     }
+    if (this.score > this.modeBests[mode]) {
+      this.modeBests[mode] = this.score;
+      changed = true;
+    }
     return changed;
   }
 
@@ -98,6 +106,52 @@ export class ScoreManager {
           this.dailyBest = d.score;
         }
       }
+      // Load per-mode bests
+      for (const mode of ['arcade', 'zen', 'daily'] as const) {
+        const raw = parseInt(localStorage.getItem(`deflect_best_${mode}`) || '0', 10);
+        this.modeBests[mode] = Number.isFinite(raw) ? raw : 0;
+      }
+    } catch {}
+  }
+
+  updateDailyStreak(): void {
+    const today = new Date().toISOString().split('T')[0];
+    if (this._streakLastDate === today) return; // Already played today
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    if (this._streakLastDate === yesterdayStr) {
+      this.dailyStreak++;
+    } else {
+      this.dailyStreak = 1;
+    }
+    this._streakLastDate = today;
+  }
+
+  loadDailyStreak(): void {
+    try {
+      const raw = localStorage.getItem('deflect_streak');
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d && typeof d.lastDate === 'string' && typeof d.count === 'number') {
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        if (d.lastDate === today || d.lastDate === yesterdayStr) {
+          this.dailyStreak = d.count;
+          this._streakLastDate = d.lastDate;
+        }
+      }
+    } catch {}
+  }
+
+  saveDailyStreak(): void {
+    try {
+      localStorage.setItem('deflect_streak', JSON.stringify({
+        lastDate: this._streakLastDate,
+        count: this.dailyStreak,
+      }));
     } catch {}
   }
 
@@ -112,6 +166,10 @@ export class ScoreManager {
             score: this.dailyBest,
           }),
         );
+      }
+      // Persist per-mode bests
+      for (const m of ['arcade', 'zen', 'daily'] as const) {
+        localStorage.setItem(`deflect_best_${m}`, String(this.modeBests[m]));
       }
     } catch {}
   }

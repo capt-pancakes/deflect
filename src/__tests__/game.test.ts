@@ -12,6 +12,9 @@ vi.mock('../audio', () => ({
     gameOver: vi.fn(),
     swipe: vi.fn(),
     destroy: vi.fn(),
+    isMuted: vi.fn(() => false),
+    toggleMute: vi.fn(),
+    loadMuteState: vi.fn(),
   },
 }));
 

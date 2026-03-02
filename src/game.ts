@@ -38,6 +38,7 @@ import { SongPlayer } from './song-player';
 import type { SongData } from './song-data';
 import neonOverdrive from '../songs/Neon-Overdrive.json';
 import { generateScoreCard, shareScore } from './share';
+import { track } from './analytics';
 
 export class Game {
   canvas: HTMLCanvasElement;
@@ -121,6 +122,14 @@ export class Game {
   // Constants
   PORT_MAGNETISM = 0.25; // Reduced: How strongly ports pull matching signals
 
+  // Mute button position
+  muteButtonX = 0;
+  muteButtonY = 0;
+
+  get isMuted(): boolean {
+    return audio.isMuted();
+  }
+
   // Accessibility: reduced motion preference
   reducedMotion = false;
   private motionQuery: MediaQueryList | null = null;
@@ -155,7 +164,10 @@ export class Game {
           break;
       }
     } else if (this.state === 'gameover') {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+      if (e.key === 'r' || e.key === 'R' || e.key === 'Enter' || e.key === ' ') {
+        this.music.stop();
+        this.startGame(this.mode);
+      } else if (e.key === 'Escape') {
         this.music.stop();
         this.state = 'menu';
       }
@@ -185,6 +197,8 @@ export class Game {
     window.addEventListener('keydown', this.onKeyDown);
 
     this.scoring.loadHighScores();
+    this.scoring.loadDailyStreak();
+    audio.loadMuteState();
     this.resize();
     window.addEventListener('resize', this.onResize);
   }
@@ -203,6 +217,11 @@ export class Game {
     this.particles.clear();
     this.music.stop();
     audio.destroy();
+  }
+
+  private toggleMute(): void {
+    audio.toggleMute();
+    this.music.setMuted(audio.isMuted());
   }
 
   resize() {
@@ -289,6 +308,7 @@ export class Game {
     this.setupPorts();
     audio.start();
     this.music.start('songs/Neon-Overdrive.mp3', neonOverdrive as SongData);
+    track('game_start', { mode });
 
     // Spawn first signal for tutorial
     if (this.tutorial.phase === 1) {
@@ -435,12 +455,15 @@ export class Game {
     const baseY = this.centerY + 60;
     return [
       { label: 'ARCADE', mode: 'arcade', y: baseY, color: '#4488ff' },
-      { label: 'ZEN', mode: 'zen', y: baseY + 52, color: '#44ff88' },
-      { label: 'DAILY', mode: 'daily', y: baseY + 104, color: '#ffcc44' },
+      { label: 'ZEN', mode: 'zen', y: baseY + 58, color: '#44ff88' },
+      { label: 'DAILY', mode: 'daily', y: baseY + 116, color: '#ffcc44' },
     ];
   }
 
   updateMenu(dt: number) {
+    this.muteButtonX = this.width - 40;
+    this.muteButtonY = 24;
+
     this.particles.update(dt);
     if (Math.random() < dt * 3) {
       const angle = Math.random() * Math.PI * 2;
@@ -453,6 +476,15 @@ export class Game {
     const tapPos = this.input.consumeTapWithPos();
     if (tapPos) {
       audio.init();
+
+      // Check mute button hit first
+      const dx = tapPos.x - this.muteButtonX;
+      const dy = tapPos.y - this.muteButtonY;
+      if (dx * dx + dy * dy < 16 * 16) {
+        this.toggleMute();
+        return;
+      }
+
       // Check button hits
       const buttons = this.getMenuButtons();
       const btnW = Math.min(this.width * 0.55, 200);
@@ -492,21 +524,50 @@ export class Game {
     const tapPos = this.input.consumeTapWithPos();
     if (tapPos) {
       // Check share button hit
-      const btnW = Math.min(this.width * 0.4, 160);
-      const btnH = 38;
-      const btnX = this.centerX - btnW / 2;
-      const btnY = this.renderer.shareButtonY - btnH / 2;
+      const shareBtnW = Math.min(this.width * 0.4, 160);
+      const shareBtnH = 38;
+      const shareBtnX = this.centerX - shareBtnW / 2;
+      const shareBtnY = this.renderer.shareButtonY - shareBtnH / 2;
       if (
-        tapPos.x >= btnX &&
-        tapPos.x <= btnX + btnW &&
-        tapPos.y >= btnY &&
-        tapPos.y <= btnY + btnH
+        tapPos.x >= shareBtnX &&
+        tapPos.x <= shareBtnX + shareBtnW &&
+        tapPos.y >= shareBtnY &&
+        tapPos.y <= shareBtnY + shareBtnH
       ) {
         this.handleShare();
         return;
       }
-      this.music.stop();
-      this.state = 'menu';
+
+      // Check retry button hit (left button)
+      const btnW = Math.min(this.width * 0.35, 140);
+      const btnH = 38;
+      const gap = 12;
+      const totalW = btnW * 2 + gap;
+      const leftX = this.centerX - totalW / 2;
+      const retryY = this.renderer.retryButtonY;
+      if (
+        tapPos.x >= leftX &&
+        tapPos.x <= leftX + btnW &&
+        tapPos.y >= retryY - btnH / 2 &&
+        tapPos.y <= retryY + btnH / 2
+      ) {
+        this.music.stop();
+        this.startGame(this.mode);
+        return;
+      }
+
+      // Check menu button hit (right button)
+      const rightX = leftX + btnW + gap;
+      if (
+        tapPos.x >= rightX &&
+        tapPos.x <= rightX + btnW &&
+        tapPos.y >= retryY - btnH / 2 &&
+        tapPos.y <= retryY + btnH / 2
+      ) {
+        this.music.stop();
+        this.state = 'menu';
+        return;
+      }
     }
     if (this.input.consumeSwipe()) {
       this.music.stop();
@@ -515,6 +576,7 @@ export class Game {
   }
 
   async handleShare() {
+    track('share_initiated', { mode: this.mode, score: this.scoring.score });
     try {
       const card = generateScoreCard({
         score: this.scoring.score,
@@ -826,9 +888,15 @@ export class Game {
 
     audio.gameOver();
     this.music.stop();
+    track('game_over', { mode: this.mode, score: this.scoring.score, elapsed: Math.floor(this.elapsed), maxCombo: this.scoring.maxCombo });
 
     if (this.scoring.finalizeScores(this.mode)) {
       this.scoring.saveHighScores(this.mode, this.dailySeedValue);
+    }
+
+    if (this.mode === 'daily') {
+      this.scoring.updateDailyStreak();
+      this.scoring.saveDailyStreak();
     }
   }
 

@@ -104,7 +104,9 @@ export interface RenderableGameState {
     displayScore: number;
     highScore: number;
     dailyBest: number;
+    dailyStreak: number;
     colorMisses: Partial<Record<SignalColor, number>>;
+    modeBests: Record<'arcade' | 'zen' | 'daily', number>;
     getWorstColor(): SignalColor | null;
   };
   tutorial: {
@@ -135,6 +137,9 @@ export interface RenderableGameState {
   menuPulse: number;
   shareMessage: string;
   shareMessageTimer: number;
+  isMuted: boolean;
+  muteButtonX: number;
+  muteButtonY: number;
   reducedMotion: boolean;
   getMenuButtons(): MenuButton[];
   input: { getActiveSwipe(): ActiveSwipe | null };
@@ -147,6 +152,12 @@ export class Renderer {
 
   /** Y-position of the share button, computed during renderGameOver. */
   shareButtonY = 0;
+
+  /** Y-position of the retry button, computed during renderGameOver. */
+  retryButtonY = 0;
+
+  /** Y-position of the menu button, computed during renderGameOver. */
+  menuButtonY = 0;
 
   /** Active beat ripples expanding outward on kicks */
   private beatRipples: BeatRipple[] = [];
@@ -262,14 +273,31 @@ export class Renderer {
       if (btn.mode === 'zen') ctx.fillText('No damage, pure flow', game.centerX, btn.y + 16);
       if (btn.mode === 'daily')
         ctx.fillText('Same pattern for everyone', game.centerX, btn.y + 16);
+
+      // Per-mode best score
+      const best = game.scoring.modeBests[btn.mode];
+      if (best > 0) {
+        ctx.fillStyle = `${btn.color}66`;
+        ctx.font = fontString(Math.min(game.width * 0.025, 10));
+        ctx.fillText(`BEST: ${best}`, game.centerX, btn.y + 28);
+      }
+
+      // Daily streak badge
+      if (btn.mode === 'daily' && game.scoring.dailyStreak > 0) {
+        ctx.fillStyle = '#ffcc44';
+        ctx.font = fontString(Math.min(game.width * 0.025, 10), true);
+        ctx.fillText(`${game.scoring.dailyStreak} day streak`, game.centerX, btn.y + (best > 0 ? 38 : 28));
+      }
     }
 
-    // High score
-    if (game.scoring.highScore > 0) {
+    // Legacy high score fallback (only shows when no per-mode bests exist)
+    if (game.scoring.highScore > 0 && game.scoring.modeBests.arcade === 0 && game.scoring.modeBests.zen === 0) {
       ctx.fillStyle = '#ffcc44';
       ctx.font = fontString(Math.min(game.width * 0.035, 14));
-      ctx.fillText(`BEST: ${game.scoring.highScore}`, game.centerX, game.centerY + 180);
+      ctx.fillText(`BEST: ${game.scoring.highScore}`, game.centerX, game.centerY + 200);
     }
+
+    this.renderMuteButton(ctx, game);
   }
 
   private renderArenaRing(
@@ -840,6 +868,14 @@ export class Renderer {
       ctx.fillText('DAILY', game.width - 15, 20);
     }
 
+    // Muted indicator during gameplay
+    if (game.isMuted) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ff4466';
+      ctx.font = fontString(Math.min(game.width * 0.03, 12), true);
+      ctx.fillText('MUTED', game.width - 15, 38);
+    }
+
     // Slow-mo indicator
     if (game.timeScale < 0.8) {
       ctx.textAlign = 'center';
@@ -947,10 +983,50 @@ export class Renderer {
       ctx.fillText(game.shareMessage, game.centerX, y + 30);
     }
 
-    // Tap to continue
-    const tapAlpha = Math.sin(game.animTime * 3) * 0.3 + 0.7;
-    ctx.fillStyle = `rgba(255, 255, 255, ${tapAlpha})`;
+    // Retry and Menu buttons
+    const bottomY = game.height - 60;
+    const btnW = Math.min(game.width * 0.35, 140);
+    const btnH = 38;
+    const gap = 12;
+    const totalW = btnW * 2 + gap;
+    const leftX = game.centerX - totalW / 2;
+    const rightX = leftX + btnW + gap;
+
+    // RETRY button (blue, left)
+    this.retryButtonY = bottomY;
+    ctx.fillStyle = '#4488ff22';
+    ctx.strokeStyle = '#4488ff66';
+    ctx.lineWidth = 1.5;
+    drawRoundRect(ctx, leftX, bottomY - btnH / 2, btnW, btnH, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#4488ff';
+    ctx.font = font(0.038, true);
+    ctx.fillText('RETRY', leftX + btnW / 2, bottomY);
+
+    // MENU button (grey, right)
+    this.menuButtonY = bottomY;
+    ctx.fillStyle = '#ffffff11';
+    ctx.strokeStyle = '#ffffff33';
+    ctx.lineWidth = 1.5;
+    drawRoundRect(ctx, rightX, bottomY - btnH / 2, btnW, btnH, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#888';
     ctx.font = font(0.035);
-    ctx.fillText('TAP TO CONTINUE', game.centerX, game.height - 60);
+    ctx.fillText('MENU', rightX + btnW / 2, bottomY);
+  }
+
+  private renderMuteButton(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+    const x = game.muteButtonX;
+    const y = game.muteButtonY;
+    const label = game.isMuted ? 'MUTE' : 'SND';
+    const color = game.isMuted ? '#ff4466' : '#8888aa';
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.font = fontString(Math.min(game.width * 0.03, 12), true);
+    ctx.fillText(label, x, y);
   }
 }
