@@ -2,6 +2,7 @@
 
 let audioCtx: AudioContext | null = null;
 const pendingTimeouts: ReturnType<typeof setTimeout>[] = [];
+let muted = false;
 
 export function getCtx(): AudioContext | null {
   if (!audioCtx) {
@@ -24,6 +25,7 @@ function playTone(
   volume: number = 0.15,
   freqEnd?: number,
 ) {
+  if (muted) return;
   const ctx = getCtx();
   if (!ctx) return;
 
@@ -86,6 +88,23 @@ export const audio = {
   init() {
     // Initialize audio context on first user interaction
     getCtx();
+  },
+
+  isMuted(): boolean {
+    return muted;
+  },
+
+  toggleMute(): void {
+    muted = !muted;
+    try {
+      localStorage.setItem('deflect_muted', muted ? '1' : '0');
+    } catch {}
+  },
+
+  loadMuteState(): void {
+    try {
+      muted = localStorage.getItem('deflect_muted') === '1';
+    } catch {}
   },
 
   destroy() {

@@ -239,6 +239,12 @@ export class SongPlayer {
     }
   }
 
+  setMuted(muted: boolean): void {
+    if (this.audio) {
+      this.audio.muted = muted;
+    }
+  }
+
   setIntensityLevel(layers: number): void {
     this.beatState.visualIntensity = Math.min(1, Math.max(0.7, layers / 5));
   }

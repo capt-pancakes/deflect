@@ -1,10 +1,12 @@
 import { Game } from './game';
+import { track } from './analytics';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const loading = document.getElementById('loading') as HTMLDivElement;
 
 if (!canvas) throw new Error('Canvas element not found');
 const game = new Game(canvas);
+track('page_view');
 
 // Hide loading screen
 requestAnimationFrame(() => {
