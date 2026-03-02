@@ -18,6 +18,7 @@ export default defineConfig({
       manifest: false, // Use existing manifest.json in public/
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,json,mp3}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB for music files
       },
     }),
   ],
