@@ -39,6 +39,21 @@ describe('generateScoreCard', () => {
       const card = generateScoreCard({ ...baseStats, mode: 'unknown' });
       expect(card).toContain('ARCADE');
     });
+
+    it('includes date for daily mode', () => {
+      const card = generateScoreCard({ ...baseStats, mode: 'daily' });
+      const today = new Date();
+      const month = today.toLocaleDateString('en-US', { month: 'short' });
+      const day = today.getDate();
+      expect(card).toContain(`DAILY ${month} ${day}`);
+    });
+
+    it('does not include date for arcade mode', () => {
+      const card = generateScoreCard({ ...baseStats, mode: 'arcade' });
+      const today = new Date();
+      const month = today.toLocaleDateString('en-US', { month: 'short' });
+      expect(card).not.toContain(month);
+    });
   });
 
   describe('accuracy bar', () => {

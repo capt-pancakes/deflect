@@ -277,4 +277,84 @@ describe('ScoreManager', () => {
       vi.unstubAllGlobals();
     });
   });
+
+  describe('daily streak', () => {
+    it('starts with zero streak', () => {
+      expect(sm.dailyStreak).toBe(0);
+    });
+
+    it('updateDailyStreak sets streak to 1 on first daily play', () => {
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(1);
+    });
+
+    it('updateDailyStreak increments when last play was yesterday', () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      sm['_streakLastDate'] = yesterday.toISOString().split('T')[0];
+      sm.dailyStreak = 3;
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(4);
+    });
+
+    it('updateDailyStreak does not increment when already played today', () => {
+      const today = new Date().toISOString().split('T')[0];
+      sm['_streakLastDate'] = today;
+      sm.dailyStreak = 3;
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(3);
+    });
+
+    it('updateDailyStreak resets when last play was 2+ days ago', () => {
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      sm['_streakLastDate'] = twoDaysAgo.toISOString().split('T')[0];
+      sm.dailyStreak = 5;
+      sm.updateDailyStreak();
+      expect(sm.dailyStreak).toBe(1);
+    });
+
+    it('saveDailyStreak persists to localStorage', () => {
+      const setItem = vi.fn();
+      vi.stubGlobal('localStorage', { getItem: vi.fn(), setItem });
+      sm.dailyStreak = 3;
+      sm['_streakLastDate'] = new Date().toISOString().split('T')[0];
+      sm.saveDailyStreak();
+      const call = setItem.mock.calls.find((c: string[]) => c[0] === 'deflect_streak');
+      expect(call).toBeDefined();
+      const saved = JSON.parse(call![1]);
+      expect(saved.count).toBe(3);
+      expect(saved.lastDate).toBe(new Date().toISOString().split('T')[0]);
+      vi.unstubAllGlobals();
+    });
+
+    it('loadDailyStreak restores streak from localStorage', () => {
+      const today = new Date().toISOString().split('T')[0];
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((key: string) => {
+          if (key === 'deflect_streak') return JSON.stringify({ lastDate: today, count: 7 });
+          return null;
+        }),
+        setItem: vi.fn(),
+      });
+      sm.loadDailyStreak();
+      expect(sm.dailyStreak).toBe(7);
+      vi.unstubAllGlobals();
+    });
+
+    it('loadDailyStreak resets if last play was 2+ days ago', () => {
+      const old = new Date();
+      old.setDate(old.getDate() - 3);
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((key: string) => {
+          if (key === 'deflect_streak') return JSON.stringify({ lastDate: old.toISOString().split('T')[0], count: 7 });
+          return null;
+        }),
+        setItem: vi.fn(),
+      });
+      sm.loadDailyStreak();
+      expect(sm.dailyStreak).toBe(0);
+      vi.unstubAllGlobals();
+    });
+  });
 });

@@ -15,6 +15,9 @@ export class ScoreManager {
   dailyBest = 0;
   hasPlayedBefore = false;
 
+  dailyStreak = 0;
+  private _streakLastDate = '';
+
   /** Increment combo, add points, return points earned. */
   addCatch(): number {
     this.combo++;
@@ -98,6 +101,47 @@ export class ScoreManager {
           this.dailyBest = d.score;
         }
       }
+    } catch {}
+  }
+
+  updateDailyStreak(): void {
+    const today = new Date().toISOString().split('T')[0];
+    if (this._streakLastDate === today) return; // Already played today
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    if (this._streakLastDate === yesterdayStr) {
+      this.dailyStreak++;
+    } else {
+      this.dailyStreak = 1;
+    }
+    this._streakLastDate = today;
+  }
+
+  loadDailyStreak(): void {
+    try {
+      const raw = localStorage.getItem('deflect_streak');
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d && typeof d.lastDate === 'string' && typeof d.count === 'number') {
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        if (d.lastDate === today || d.lastDate === yesterdayStr) {
+          this.dailyStreak = d.count;
+          this._streakLastDate = d.lastDate;
+        }
+      }
+    } catch {}
+  }
+
+  saveDailyStreak(): void {
+    try {
+      localStorage.setItem('deflect_streak', JSON.stringify({
+        lastDate: this._streakLastDate,
+        count: this.dailyStreak,
+      }));
     } catch {}
   }
 

@@ -18,6 +18,10 @@ export function generateScoreCard(stats: {
 
   const modeLabel = stats.mode === 'zen' ? 'ZEN' : stats.mode === 'daily' ? 'DAILY' : 'ARCADE';
 
+  const dateStr = stats.mode === 'daily'
+    ? ` ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    : '';
+
   // Color performance blocks (shows which colors you handled well)
   const colorEmoji: Record<SignalColor, string> = {
     red: '\ud83d\udfe5',
@@ -59,7 +63,7 @@ export function generateScoreCard(stats: {
           : '';
 
   const lines = [
-    `DEFLECT ${modeLabel} ${pattern}`,
+    `DEFLECT ${modeLabel}${dateStr} ${pattern}`,
     `${stats.score} pts | ${stats.survived < 1 ? '<1s' : `${Math.floor(stats.survived)}s`} | ${stats.maxCombo}x ${comboIcon}`,
     `${bar} ${accuracy}%`,
     '',

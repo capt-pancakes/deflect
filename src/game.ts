@@ -194,6 +194,7 @@ export class Game {
     window.addEventListener('keydown', this.onKeyDown);
 
     this.scoring.loadHighScores();
+    this.scoring.loadDailyStreak();
     audio.loadMuteState();
     this.resize();
     window.addEventListener('resize', this.onResize);
@@ -859,6 +860,11 @@ export class Game {
 
     if (this.scoring.finalizeScores(this.mode)) {
       this.scoring.saveHighScores(this.mode, this.dailySeedValue);
+    }
+
+    if (this.mode === 'daily') {
+      this.scoring.updateDailyStreak();
+      this.scoring.saveDailyStreak();
     }
   }
 
