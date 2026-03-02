@@ -104,6 +104,7 @@ export interface RenderableGameState {
     displayScore: number;
     highScore: number;
     dailyBest: number;
+    dailyStreak: number;
     colorMisses: Partial<Record<SignalColor, number>>;
     getWorstColor(): SignalColor | null;
   };
@@ -262,6 +263,13 @@ export class Renderer {
       if (btn.mode === 'zen') ctx.fillText('No damage, pure flow', game.centerX, btn.y + 16);
       if (btn.mode === 'daily')
         ctx.fillText('Same pattern for everyone', game.centerX, btn.y + 16);
+
+      // Daily streak badge
+      if (btn.mode === 'daily' && game.scoring.dailyStreak > 0) {
+        ctx.fillStyle = '#ffcc44';
+        ctx.font = fontString(Math.min(game.width * 0.025, 10), true);
+        ctx.fillText(`${game.scoring.dailyStreak} day streak`, game.centerX, btn.y + 28);
+      }
     }
 
     // High score
