@@ -461,8 +461,14 @@ export class Renderer {
   }
 
   private renderTutorial(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
-    if (game.tutorial.phase !== 1) return;
+    if (game.tutorial.phase === 1) {
+      this.renderTutorialPhase1(ctx, game);
+    } else if (game.tutorial.phase === 3) {
+      this.renderTutorialPhase3(ctx, game);
+    }
+  }
 
+  private renderTutorialPhase1(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
     // Ghost swipe animation
     const t = (game.tutorial.ghostSwipeAnim % 2) / 2; // 0 to 1 over 2 seconds
     if (t < 0.6) {
@@ -498,6 +504,23 @@ export class Renderer {
     ctx.fillStyle = `rgba(255, 255, 255, ${hintAlpha})`;
     ctx.font = fontString(Math.min(game.width * 0.06, 28), true);
     ctx.fillText('SWIPE TO DEFLECT!', game.centerX, game.height - 100);
+  }
+
+  private renderTutorialPhase3(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+    // Pulsing hint text
+    const hintAlpha = Math.sin(game.tutorial.ghostSwipeAnim * 4) * 0.3 + 0.7;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Main hint: "MATCH THE COLORS!"
+    ctx.fillStyle = `rgba(68, 136, 255, ${hintAlpha})`;
+    ctx.font = fontString(Math.min(game.width * 0.06, 28), true);
+    ctx.fillText('MATCH THE COLORS!', game.centerX, game.height - 120);
+
+    // Subtitle: "Guide blue to blue port"
+    ctx.fillStyle = `rgba(68, 136, 255, ${hintAlpha * 0.7})`;
+    ctx.font = fontString(Math.min(game.width * 0.04, 18));
+    ctx.fillText('Guide blue to blue port', game.centerX, game.height - 85);
   }
 
   private renderPorts(ctx: CanvasRenderingContext2D, game: RenderableGameState, beatState?: BeatState): void {
