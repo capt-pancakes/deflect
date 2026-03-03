@@ -166,7 +166,7 @@ describe('Game integration', () => {
 
   it('update(1/60) runs without throwing', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 3;
+    game.tutorial.phase = 4;
     expect(() => game.update(1 / 60)).not.toThrow();
   });
 
@@ -176,13 +176,13 @@ describe('Game integration', () => {
 
   it('render() in playing state runs without throwing', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 3;
+    game.tutorial.phase = 4;
     expect(() => game.render()).not.toThrow();
   });
 
   it('after enough updates, signals spawn', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 3;
+    game.tutorial.phase = 4;
 
     const dt = 1 / 60;
     for (let i = 0; i < 200; i++) {
@@ -194,7 +194,7 @@ describe('Game integration', () => {
 
   it('destroy() cleans up without throwing', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 3;
+    game.tutorial.phase = 4;
     for (let i = 0; i < 10; i++) {
       game.update(1 / 60);
     }
@@ -230,14 +230,14 @@ describe('Game integration', () => {
 
   it('multiple start/destroy cycles work', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 3;
+    game.tutorial.phase = 4;
     for (let i = 0; i < 30; i++) game.update(1 / 60);
     game.destroy();
 
     const { canvas } = createMockCanvas();
     const game2 = new Game(canvas);
     game2.startGame('zen');
-    game2.tutorial.phase = 3;
+    game2.tutorial.phase = 4;
     for (let i = 0; i < 30; i++) game2.update(1 / 60);
     expect(() => game2.destroy()).not.toThrow();
   });
