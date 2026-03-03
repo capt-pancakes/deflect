@@ -24,6 +24,16 @@ vi.mock('../share', () => ({
   shareScore: vi.fn(() => Promise.resolve(true)),
 }));
 
+// Mock the share-image module
+vi.mock('../share-image', () => ({
+  generateShareImage: vi.fn(() => ({
+    width: 400,
+    height: 600,
+    getContext: vi.fn(),
+    toBlob: vi.fn(),
+  })),
+}));
+
 import { Game } from '../game';
 
 function createMockCanvas() {

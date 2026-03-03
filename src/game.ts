@@ -38,7 +38,10 @@ import { SongPlayer } from './song-player';
 import type { SongData } from './song-data';
 import neonOverdrive from '../songs/Neon-Overdrive.json';
 import { generateScoreCard, shareScore } from './share';
+import { generateShareImage } from './share-image';
 import { track } from './analytics';
+import { vibrateOnCatch, vibrateOnMiss, vibrateOnMilestone, setHapticsEnabled } from './haptics';
+import { PwaPrompt } from './pwa-prompt';
 
 export class Game {
   canvas: HTMLCanvasElement;
@@ -120,6 +123,9 @@ export class Game {
   // Music
   music = new SongPlayer();
   private prevMusicEventType: string | null = null;
+
+  // PWA install prompt
+  pwaPrompt = new PwaPrompt();
 
   // Collision detection
   collisions: CollisionSystem;
@@ -204,6 +210,7 @@ export class Game {
     this.scoring.loadHighScores();
     this.scoring.loadDailyStreak();
     audio.loadMuteState();
+    setHapticsEnabled(!audio.isMuted());
     this.resize();
     window.addEventListener('resize', this.onResize);
   }
@@ -222,11 +229,13 @@ export class Game {
     this.particles.clear();
     this.music.stop();
     audio.destroy();
+    this.pwaPrompt.destroy();
   }
 
   private toggleMute(): void {
     audio.toggleMute();
     this.music.setMuted(audio.isMuted());
+    setHapticsEnabled(!audio.isMuted());
   }
 
   resize() {
@@ -552,6 +561,21 @@ export class Game {
     if (tapPos) {
       audio.init();
 
+      // Check PWA banner tap
+      if (this.pwaPrompt.shouldShow()) {
+        const bannerH = 48;
+        const bannerY = 0;
+        if (tapPos.y >= bannerY && tapPos.y <= bannerY + bannerH) {
+          // Check dismiss X button (right side)
+          if (tapPos.x >= this.width - 44) {
+            this.pwaPrompt.dismiss();
+          } else {
+            this.pwaPrompt.install();
+          }
+          return;
+        }
+      }
+
       // Check mute button hit first
       const dx = tapPos.x - this.muteButtonX;
       const dy = tapPos.y - this.muteButtonY;
@@ -653,7 +677,7 @@ export class Game {
   async handleShare() {
     track('share_initiated', { mode: this.mode, score: this.scoring.score });
     try {
-      const card = generateScoreCard({
+      const shareStats = {
         score: this.scoring.score,
         survived: this.elapsed,
         catches: this.scoring.catches,
@@ -661,8 +685,10 @@ export class Game {
         maxCombo: this.scoring.maxCombo,
         mode: this.mode,
         colorMisses: this.scoring.colorMisses,
-      });
-      const ok = await shareScore(card);
+      };
+      const card = generateScoreCard(shareStats);
+      const imageCanvas = generateShareImage(shareStats);
+      const ok = await shareScore(card, imageCanvas);
       this.shareMessage = ok ? 'Copied!' : 'Share failed';
     } catch {
       this.shareMessage = 'Share failed';
@@ -894,28 +920,26 @@ export class Game {
     port.catchCount++;
     const combo = this.scoring.combo;
 
+    // Haptic feedback
+    vibrateOnCatch();
+    if (combo === 5 || combo === 10 || combo === 15) {
+      vibrateOnMilestone();
+    }
+
     // Combo visual escalation: scale particles and set glow
     let particleCount = this.reducedMotion ? 8 : 25;
     if (combo >= 15) {
-      // Max glow + camera shake pulse per catch
       this.comboGlow = 1.0;
-      particleCount = this.reducedMotion ? 8 : 50; // 2x particles
+      particleCount = this.reducedMotion ? 8 : 50;
       if (!this.reducedMotion) {
         this.shakeIntensity = 4;
       }
     } else if (combo >= 10) {
-      // Brighter glow + 2x particles
       this.comboGlow = 0.7;
-      particleCount = this.reducedMotion ? 8 : 50; // 2x particles
+      particleCount = this.reducedMotion ? 8 : 50;
     } else if (combo >= 5) {
-      // Subtle glow + 1.5x particles
       this.comboGlow = 0.4;
-      particleCount = this.reducedMotion ? 8 : 38; // 1.5x particles
-    }
-
-    // Screen flash at 10x combo (not reduced motion)
-    if (combo === 10 && !this.reducedMotion) {
-      // Flash is handled by renderer via comboGlow
+      particleCount = this.reducedMotion ? 8 : 38;
     }
 
     // Juicy feedback
@@ -942,6 +966,7 @@ export class Game {
     }
 
     this.scoring.addMiss(signal.color);
+    vibrateOnMiss();
     this.particles.burst(signal.pos, '#666', this.reducedMotion ? 2 : 6, 60, 0.3);
     this.addFloatingText('WRONG', signal.pos, '#ff6666', 1);
   }
@@ -980,6 +1005,7 @@ export class Game {
 
     this.coreHP--;
     this.scoring.addMiss(signal.color);
+    vibrateOnMiss();
     this.coreDamageFlash = 1;
     this.shakeIntensity = this.reducedMotion ? 0 : 10;
 
@@ -1010,6 +1036,7 @@ export class Game {
     audio.gameOver();
     this.music.stop();
     track('game_over', { mode: this.mode, score: this.scoring.score, elapsed: Math.floor(this.elapsed), maxCombo: this.scoring.maxCombo });
+    this.pwaPrompt.onGameOver(this.mode);
 
     if (this.scoring.finalizeScores(this.mode)) {
       this.scoring.saveHighScores(this.mode, this.dailySeedValue);
