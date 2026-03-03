@@ -174,6 +174,10 @@ export class Renderer {
   /** Drop flash intensity (decays over time) */
   private dropFlash = 0;
 
+  /** Cached combo glow gradient to avoid per-frame createRadialGradient */
+  private comboGlowGradient: CanvasGradient | null = null;
+  private comboGlowRadius = 0;
+
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
   }
@@ -363,18 +367,23 @@ export class Renderer {
     // Combo glow: radial gradient around arena when comboGlow > 0
     if (game.comboGlow > 0 && !game.reducedMotion) {
       const glowRadius = game.arenaRadius * 1.3;
-      const gradient = ctx.createRadialGradient(
-        game.centerX, game.centerY, game.arenaRadius * 0.6,
-        game.centerX, game.centerY, glowRadius,
-      );
-      const alpha = game.comboGlow * 0.25;
-      gradient.addColorStop(0, `rgba(68, 136, 255, ${alpha})`);
-      gradient.addColorStop(0.6, `rgba(68, 136, 255, ${alpha * 0.4})`);
-      gradient.addColorStop(1, 'rgba(68, 136, 255, 0)');
-      ctx.fillStyle = gradient;
+      if (!this.comboGlowGradient || this.comboGlowRadius !== game.arenaRadius) {
+        this.comboGlowRadius = game.arenaRadius;
+        this.comboGlowGradient = ctx.createRadialGradient(
+          game.centerX, game.centerY, game.arenaRadius * 0.6,
+          game.centerX, game.centerY, glowRadius,
+        );
+        this.comboGlowGradient.addColorStop(0, 'rgba(68, 136, 255, 1)');
+        this.comboGlowGradient.addColorStop(0.6, 'rgba(68, 136, 255, 0.4)');
+        this.comboGlowGradient.addColorStop(1, 'rgba(68, 136, 255, 0)');
+      }
+      ctx.save();
+      ctx.globalAlpha = game.comboGlow * 0.25;
+      ctx.fillStyle = this.comboGlowGradient;
       ctx.beginPath();
       ctx.arc(game.centerX, game.centerY, glowRadius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
 
     // Beat ring ripples (Phase 2.3) - spawn on strong kicks
