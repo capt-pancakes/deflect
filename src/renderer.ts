@@ -135,6 +135,7 @@ export interface RenderableGameState {
   arenaRadius: number;
   animTime: number;
   menuPulse: number;
+  dailyStats: { attempts: number; percentile: number } | null;
   shareMessage: string;
   shareMessageTimer: number;
   isMuted: boolean;
@@ -928,6 +929,19 @@ export class Renderer {
     const accuracy = total > 0 ? Math.round((game.scoring.catches / total) * 100) : 0;
     ctx.fillText(`${accuracy}% accuracy`, game.centerX, y);
     y += 35;
+
+    // Daily global stats
+    if (game.mode === 'daily' && game.dailyStats) {
+      y += 8;
+      ctx.fillStyle = '#ffcc44';
+      ctx.font = font(0.032, true);
+      ctx.fillText(
+        `${game.dailyStats.attempts} players today | Top ${game.dailyStats.percentile}%`,
+        game.centerX,
+        y,
+      );
+      y += 28;
+    }
 
     // Post-run coaching
     const worstColor = game.scoring.getWorstColor();

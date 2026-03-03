@@ -39,6 +39,7 @@ import type { SongData } from './song-data';
 import neonOverdrive from '../songs/Neon-Overdrive.json';
 import { generateScoreCard, shareScore } from './share';
 import { track } from './analytics';
+import { submitDailyScore, getDailyStats } from './convex-client';
 
 export class Game {
   canvas: HTMLCanvasElement;
@@ -98,6 +99,7 @@ export class Game {
   timeScaleTarget = 1;
 
   dailySeedValue = 0;
+  dailyStats: { attempts: number; percentile: number } | null = null;
 
   // RNG
   rng: () => number = Math.random;
@@ -282,6 +284,7 @@ export class Game {
     this.coreDamageFlash = 0;
 
     this.scoring.reset();
+    this.dailyStats = null;
 
     this.elapsed = 0;
     this.spawnTimer = 0;
@@ -897,6 +900,13 @@ export class Game {
     if (this.mode === 'daily') {
       this.scoring.updateDailyStreak();
       this.scoring.saveDailyStreak();
+
+      // Submit to Convex and fetch stats
+      submitDailyScore(this.dailySeedValue, this.scoring.score).then(() => {
+        getDailyStats(this.dailySeedValue, this.scoring.score).then((stats) => {
+          this.dailyStats = stats;
+        });
+      });
     }
   }
 
