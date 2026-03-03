@@ -95,6 +95,9 @@ export class Game {
   shakeX = 0;
   shakeY = 0;
 
+  // Combo visual escalation
+  comboGlow = 0;
+
   // Slow motion for near-miss moments
   timeScale = 1;
   timeScaleTarget = 1;
@@ -289,6 +292,7 @@ export class Game {
     this.spawnTimer = 0;
     this.nextId = 0;
     this.shakeIntensity = 0;
+    this.comboGlow = 0;
     this.timeScale = 1;
     this.timeScaleTarget = 1;
     if (this.nearMissTimeout !== null) {
@@ -413,6 +417,11 @@ export class Game {
       this.corePulse += scaledDt * 2;
     }
     this.coreDamageFlash = Math.max(0, this.coreDamageFlash - scaledDt * 3);
+
+    // Decay combo glow when combo drops below 5
+    if (this.scoring.combo < 5 && this.comboGlow > 0) {
+      this.comboGlow = Math.max(0, this.comboGlow - scaledDt * 2);
+    }
 
     // Smooth score display
     this.scoring.updateDisplayScore(dt);
@@ -883,20 +892,45 @@ export class Game {
 
     const points = this.scoring.addCatch();
     port.catchCount++;
+    const combo = this.scoring.combo;
 
-    // Juicy feedback (reduced when motion preference set)
-    this.particles.burst(signal.pos, COLORS[signal.color], this.reducedMotion ? 8 : 25, 280, 0.7);
+    // Combo visual escalation: scale particles and set glow
+    let particleCount = this.reducedMotion ? 8 : 25;
+    if (combo >= 15) {
+      // Max glow + camera shake pulse per catch
+      this.comboGlow = 1.0;
+      particleCount = this.reducedMotion ? 8 : 50; // 2x particles
+      if (!this.reducedMotion) {
+        this.shakeIntensity = 4;
+      }
+    } else if (combo >= 10) {
+      // Brighter glow + 2x particles
+      this.comboGlow = 0.7;
+      particleCount = this.reducedMotion ? 8 : 50; // 2x particles
+    } else if (combo >= 5) {
+      // Subtle glow + 1.5x particles
+      this.comboGlow = 0.4;
+      particleCount = this.reducedMotion ? 8 : 38; // 1.5x particles
+    }
+
+    // Screen flash at 10x combo (not reduced motion)
+    if (combo === 10 && !this.reducedMotion) {
+      // Flash is handled by renderer via comboGlow
+    }
+
+    // Juicy feedback
+    this.particles.burst(signal.pos, COLORS[signal.color], particleCount, 280, 0.7);
     this.addFloatingText(`+${points}`, signal.pos, COLORS[signal.color]);
 
-    if (this.scoring.combo >= 5) {
+    if (combo >= 5) {
       this.addFloatingText(
-        `${this.scoring.combo}x!`,
+        `${combo}x!`,
         vec2(signal.pos.x, signal.pos.y - 25),
         '#ffcc44',
       );
     }
 
-    audio.catch(Math.min(this.scoring.combo - 1, 7));
+    audio.catch(Math.min(combo - 1, 7));
   }
 
   onWrongPort(signal: Signal, _port: Port) {

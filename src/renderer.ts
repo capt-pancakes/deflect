@@ -140,6 +140,7 @@ export interface RenderableGameState {
   isMuted: boolean;
   muteButtonX: number;
   muteButtonY: number;
+  comboGlow: number;
   reducedMotion: boolean;
   getMenuButtons(): MenuButton[];
   input: { getActiveSwipe(): ActiveSwipe | null };
@@ -351,6 +352,23 @@ export class Renderer {
     this.dropFlash = Math.max(0, this.dropFlash - dt * 3);
 
     this.renderArenaRing(ctx, game, 0.12, beatState);
+
+    // Combo glow: radial gradient around arena when comboGlow > 0
+    if (game.comboGlow > 0 && !game.reducedMotion) {
+      const glowRadius = game.arenaRadius * 1.3;
+      const gradient = ctx.createRadialGradient(
+        game.centerX, game.centerY, game.arenaRadius * 0.6,
+        game.centerX, game.centerY, glowRadius,
+      );
+      const alpha = game.comboGlow * 0.25;
+      gradient.addColorStop(0, `rgba(68, 136, 255, ${alpha})`);
+      gradient.addColorStop(0.6, `rgba(68, 136, 255, ${alpha * 0.4})`);
+      gradient.addColorStop(1, 'rgba(68, 136, 255, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(game.centerX, game.centerY, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Beat ring ripples (Phase 2.3) - spawn on strong kicks
     if (!game.reducedMotion && beatState.kickIntensity > 0.5 && this.prevKickIntensity <= 0.5) {

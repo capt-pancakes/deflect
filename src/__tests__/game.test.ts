@@ -241,4 +241,100 @@ describe('Game integration', () => {
     for (let i = 0; i < 30; i++) game2.update(1 / 60);
     expect(() => game2.destroy()).not.toThrow();
   });
+
+  describe('combo visual escalation', () => {
+    function makeMockSignal() {
+      return {
+        id: 1,
+        pos: { x: 200, y: 400 },
+        vel: { x: 0, y: 100 },
+        color: 'red' as const,
+        radius: 8,
+        trail: [],
+        alive: true,
+        age: 0,
+        enteredArena: true,
+        deflected: true,
+      };
+    }
+
+    function makeMockPort() {
+      return {
+        angleStart: 0,
+        angleEnd: 1,
+        color: 'red' as const,
+        pulsePhase: 0,
+        catchCount: 0,
+      };
+    }
+
+    it('comboGlow starts at 0', () => {
+      game.startGame('arcade');
+      expect(game.comboGlow).toBe(0);
+    });
+
+    it('comboGlow is 0.4 at combo 5', () => {
+      game.startGame('arcade');
+      game.tutorial.phase = 4;
+      // Build combo to 5
+      for (let i = 0; i < 5; i++) {
+        game.onCatch(makeMockSignal(), makeMockPort());
+      }
+      expect(game.comboGlow).toBeCloseTo(0.4);
+    });
+
+    it('comboGlow is 0.7 at combo 10', () => {
+      game.startGame('arcade');
+      game.tutorial.phase = 4;
+      for (let i = 0; i < 10; i++) {
+        game.onCatch(makeMockSignal(), makeMockPort());
+      }
+      expect(game.comboGlow).toBeCloseTo(0.7);
+    });
+
+    it('comboGlow is 1.0 at combo 15', () => {
+      game.startGame('arcade');
+      game.tutorial.phase = 4;
+      for (let i = 0; i < 15; i++) {
+        game.onCatch(makeMockSignal(), makeMockPort());
+      }
+      expect(game.comboGlow).toBeCloseTo(1.0);
+    });
+
+    it('shakeIntensity increases at combo 15', () => {
+      game.startGame('arcade');
+      game.tutorial.phase = 4;
+      for (let i = 0; i < 15; i++) {
+        game.onCatch(makeMockSignal(), makeMockPort());
+      }
+      expect(game.shakeIntensity).toBeGreaterThan(0);
+    });
+
+    it('comboGlow decays when combo drops below 5', () => {
+      game.startGame('arcade');
+      game.tutorial.phase = 4;
+      // Build combo
+      for (let i = 0; i < 5; i++) {
+        game.onCatch(makeMockSignal(), makeMockPort());
+      }
+      expect(game.comboGlow).toBeCloseTo(0.4);
+
+      // Reset combo (miss)
+      game.scoring.resetCombo();
+      // Run updates to decay
+      for (let i = 0; i < 60; i++) {
+        game.update(1 / 60);
+      }
+      expect(game.comboGlow).toBeLessThan(0.1);
+    });
+
+    it('comboGlow does not set during tutorial', () => {
+      game.startGame('arcade');
+      // tutorial is active (phase 3)
+      game.tutorial.phase = 3;
+      game._tutorialCatchResult = true;
+      game.onCatch(makeMockSignal(), makeMockPort());
+      expect(game.comboGlow).toBe(0);
+    });
+  });
 });
