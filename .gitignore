@@ -40,3 +40,7 @@ Thumbs.db
 # yarn.lock
 
 **/audit/**
+.claude/worktrees/
+
+# Convex codegen
+convex/_generated/

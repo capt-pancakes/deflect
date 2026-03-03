@@ -73,7 +73,27 @@ export function generateScoreCard(stats: {
   return lines.join('\n');
 }
 
-export async function shareScore(text: string): Promise<boolean> {
+export async function shareScore(text: string, imageCanvas?: HTMLCanvasElement): Promise<boolean> {
+  // Try image sharing first if canvas provided
+  if (imageCanvas && navigator.share) {
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        imageCanvas.toBlob(resolve, 'image/png'),
+      );
+      if (blob) {
+        const file = new File([blob], 'deflect-score.png', { type: 'image/png' });
+        const shareData = { text, files: [file] };
+        if (navigator.canShare && navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return true;
+        }
+      }
+    } catch {
+      // Fall through to text sharing
+    }
+  }
+
+  // Text sharing fallback
   if (navigator.share) {
     try {
       await navigator.share({ text });

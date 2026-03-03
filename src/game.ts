@@ -38,7 +38,11 @@ import { SongPlayer } from './song-player';
 import type { SongData } from './song-data';
 import neonOverdrive from '../songs/Neon-Overdrive.json';
 import { generateScoreCard, shareScore } from './share';
+import { generateShareImage } from './share-image';
 import { track } from './analytics';
+import { vibrateOnCatch, vibrateOnMiss, vibrateOnMilestone, setHapticsEnabled } from './haptics';
+import { PwaPrompt } from './pwa-prompt';
+import { submitDailyScore, getDailyStats } from './convex-client';
 
 export class Game {
   canvas: HTMLCanvasElement;
@@ -70,6 +74,8 @@ export class Game {
   // Tutorial
   tutorial: TutorialManager;
   hasPlayedBefore = false;
+  /** Set during tutorial phase 3 collision handling: true=correct port, false=wrong port, null=no catch */
+  _tutorialCatchResult: boolean | null = null;
 
   // Core
   coreHP = 5;
@@ -93,11 +99,15 @@ export class Game {
   shakeX = 0;
   shakeY = 0;
 
+  // Combo visual escalation
+  comboGlow = 0;
+
   // Slow motion for near-miss moments
   timeScale = 1;
   timeScaleTarget = 1;
 
   dailySeedValue = 0;
+  dailyStats: { attempts: number; percentile: number } | null = null;
 
   // RNG
   rng: () => number = Math.random;
@@ -115,6 +125,9 @@ export class Game {
   // Music
   music = new SongPlayer();
   private prevMusicEventType: string | null = null;
+
+  // PWA install prompt
+  pwaPrompt = new PwaPrompt();
 
   // Collision detection
   collisions: CollisionSystem;
@@ -199,6 +212,7 @@ export class Game {
     this.scoring.loadHighScores();
     this.scoring.loadDailyStreak();
     audio.loadMuteState();
+    setHapticsEnabled(!audio.isMuted());
     this.resize();
     window.addEventListener('resize', this.onResize);
   }
@@ -217,11 +231,13 @@ export class Game {
     this.particles.clear();
     this.music.stop();
     audio.destroy();
+    this.pwaPrompt.destroy();
   }
 
   private toggleMute(): void {
     audio.toggleMute();
     this.music.setMuted(audio.isMuted());
+    setHapticsEnabled(!audio.isMuted());
   }
 
   resize() {
@@ -282,11 +298,13 @@ export class Game {
     this.coreDamageFlash = 0;
 
     this.scoring.reset();
+    this.dailyStats = null;
 
     this.elapsed = 0;
     this.spawnTimer = 0;
     this.nextId = 0;
     this.shakeIntensity = 0;
+    this.comboGlow = 0;
     this.timeScale = 1;
     this.timeScaleTarget = 1;
     if (this.nearMissTimeout !== null) {
@@ -325,6 +343,24 @@ export class Game {
       pos,
       vel,
       color: 'red',
+      radius: this.config.signalRadius + 2, // Slightly bigger for tutorial
+      trail: [],
+      alive: true,
+      age: 0,
+      enteredArena: false,
+      deflected: false,
+    });
+  }
+
+  spawnTutorialColorSignal() {
+    // Spawn a slow blue signal from the right side, heading left toward center
+    const pos = vec2(this.centerX + this.arenaRadius + 30, this.centerY);
+    const vel = vec2(-50, 0); // Slow, heading left
+    this.signals.push({
+      id: this.nextId++,
+      pos,
+      vel,
+      color: 'blue',
       radius: this.config.signalRadius + 2, // Slightly bigger for tutorial
       trail: [],
       alive: true,
@@ -394,6 +430,11 @@ export class Game {
     }
     this.coreDamageFlash = Math.max(0, this.coreDamageFlash - scaledDt * 3);
 
+    // Decay combo glow when combo drops below 5
+    if (this.scoring.combo < 5 && this.comboGlow > 0) {
+      this.comboGlow = Math.max(0, this.comboGlow - scaledDt * 2);
+    }
+
     // Smooth score display
     this.scoring.updateDisplayScore(dt);
 
@@ -409,6 +450,7 @@ export class Game {
     this.tutorial.update(dt);
     this.particles.update(dt);
     this.updateDeflectors(dt);
+    this.updateFloatingTexts(dt);
     // Sync core pulse to beat phase (music.update() runs before this)
     this.corePulse = this.music.getBeatState().beatPhase * Math.PI * 2;
 
@@ -439,16 +481,61 @@ export class Game {
       this.checkCollisions();
 
       const action = this.tutorial.checkCompletion(this.signals.length);
-      if (action === 'complete') {
-        this.scoring.hasPlayedBefore = true;
-        try {
-          localStorage.setItem('deflect_played', '1');
-        } catch {}
-        // Reset for real game
-        this.elapsed = 0;
-        this.spawnTimer = 1.5;
+      if (action === 'spawn_color_signal') {
+        // Clear any remaining signals and spawn the color matching signal
+        this.signals = [];
+        this.deflectors = [];
+        this.spawnTutorialColorSignal();
       }
     }
+
+    if (this.tutorial.phase === 3) {
+      // Handle input
+      const swipe = this.input.consumeSwipe();
+      if (swipe) {
+        this.addDeflector(swipe.start, swipe.end);
+      }
+      this.input.consumeTap();
+
+      // Run physics
+      this.updateSignals(dt);
+
+      // Check collisions with tutorial catch tracking
+      this._tutorialCatchResult = null;
+      this.checkCollisions();
+
+      // Check if color matching phase should complete
+      if (this._tutorialCatchResult !== null) {
+        const action = this.tutorial.checkColorCompletion(this._tutorialCatchResult);
+        if (action === 'complete') {
+          this.completeTutorial();
+        } else if (action === 'wrong_port') {
+          this.addFloatingText('WRONG PORT!', vec2(this.centerX, this.centerY - 60), '#ff6666', 1.5);
+          // Respawn the blue signal
+          this.spawnTutorialColorSignal();
+        }
+        this._tutorialCatchResult = null;
+      } else if (this.tutorial.timer > 8) {
+        // Auto-complete after 8 seconds timeout
+        this.tutorial.phase = 4;
+        this.completeTutorial();
+      }
+
+      // If signal escaped arena without being caught, respawn it
+      if (this.tutorial.phase === 3 && this.signals.length === 0) {
+        this.spawnTutorialColorSignal();
+      }
+    }
+  }
+
+  private completeTutorial() {
+    this.scoring.hasPlayedBefore = true;
+    try {
+      localStorage.setItem('deflect_played', '1');
+    } catch {}
+    // Reset for real game
+    this.elapsed = 0;
+    this.spawnTimer = 1.5;
   }
 
   getMenuButtons(): { label: string; mode: GameMode; y: number; color: string }[] {
@@ -476,6 +563,21 @@ export class Game {
     const tapPos = this.input.consumeTapWithPos();
     if (tapPos) {
       audio.init();
+
+      // Check PWA banner tap
+      if (this.pwaPrompt.shouldShow()) {
+        const bannerH = 48;
+        const bannerY = 0;
+        if (tapPos.y >= bannerY && tapPos.y <= bannerY + bannerH) {
+          // Check dismiss X button (right side)
+          if (tapPos.x >= this.width - 44) {
+            this.pwaPrompt.dismiss();
+          } else {
+            this.pwaPrompt.install();
+          }
+          return;
+        }
+      }
 
       // Check mute button hit first
       const dx = tapPos.x - this.muteButtonX;
@@ -578,7 +680,7 @@ export class Game {
   async handleShare() {
     track('share_initiated', { mode: this.mode, score: this.scoring.score });
     try {
-      const card = generateScoreCard({
+      const shareStats = {
         score: this.scoring.score,
         survived: this.elapsed,
         catches: this.scoring.catches,
@@ -586,8 +688,10 @@ export class Game {
         maxCombo: this.scoring.maxCombo,
         mode: this.mode,
         colorMisses: this.scoring.colorMisses,
-      });
-      const ok = await shareScore(card);
+      };
+      const card = generateScoreCard(shareStats);
+      const imageCanvas = generateShareImage(shareStats);
+      const ok = await shareScore(card, imageCanvas);
       this.shareMessage = ok ? 'Copied!' : 'Share failed';
     } catch {
       this.shareMessage = 'Share failed';
@@ -807,31 +911,73 @@ export class Game {
   // --- EVENT HANDLERS ---
 
   onCatch(signal: Signal, port: Port) {
+    // During tutorial phase 3, track result but don't score
+    if (this.tutorial.phase === 3) {
+      this._tutorialCatchResult = true;
+      this.particles.burst(signal.pos, COLORS[signal.color], this.reducedMotion ? 8 : 25, 280, 0.7);
+      audio.catch(0);
+      return;
+    }
+
     const points = this.scoring.addCatch();
     port.catchCount++;
+    const combo = this.scoring.combo;
 
-    // Juicy feedback (reduced when motion preference set)
-    this.particles.burst(signal.pos, COLORS[signal.color], this.reducedMotion ? 8 : 25, 280, 0.7);
+    // Haptic feedback
+    vibrateOnCatch();
+    if (combo === 5 || combo === 10 || combo === 15) {
+      vibrateOnMilestone();
+    }
+
+    // Combo visual escalation: scale particles and set glow
+    let particleCount = this.reducedMotion ? 8 : 25;
+    if (combo >= 15) {
+      this.comboGlow = 1.0;
+      particleCount = this.reducedMotion ? 8 : 50;
+      if (!this.reducedMotion) {
+        this.shakeIntensity = 4;
+      }
+    } else if (combo >= 10) {
+      this.comboGlow = 0.7;
+      particleCount = this.reducedMotion ? 8 : 50;
+    } else if (combo >= 5) {
+      this.comboGlow = 0.4;
+      particleCount = this.reducedMotion ? 8 : 38;
+    }
+
+    // Juicy feedback
+    this.particles.burst(signal.pos, COLORS[signal.color], particleCount, 280, 0.7);
     this.addFloatingText(`+${points}`, signal.pos, COLORS[signal.color]);
 
-    if (this.scoring.combo >= 5) {
+    if (combo >= 5) {
       this.addFloatingText(
-        `${this.scoring.combo}x!`,
+        `${combo}x!`,
         vec2(signal.pos.x, signal.pos.y - 25),
         '#ffcc44',
       );
     }
 
-    audio.catch(Math.min(this.scoring.combo - 1, 7));
+    audio.catch(Math.min(combo - 1, 7));
   }
 
   onWrongPort(signal: Signal, _port: Port) {
+    // During tutorial phase 3, track result but don't penalize
+    if (this.tutorial.phase === 3) {
+      this._tutorialCatchResult = false;
+      this.particles.burst(signal.pos, '#666', this.reducedMotion ? 2 : 6, 60, 0.3);
+      return;
+    }
+
     this.scoring.addMiss(signal.color);
+    vibrateOnMiss();
     this.particles.burst(signal.pos, '#666', this.reducedMotion ? 2 : 6, 60, 0.3);
     this.addFloatingText('WRONG', signal.pos, '#ff6666', 1);
   }
 
   onEscape(signal: Signal) {
+    // During tutorial, don't penalize escapes
+    if (this.tutorial.isActive()) return;
+
     this.scoring.addMiss(signal.color);
     this.particles.burst(signal.pos, '#444', this.reducedMotion ? 1 : 4, 40, 0.3);
   }
@@ -857,8 +1003,12 @@ export class Game {
   }
 
   onCoreDamage(signal: Signal) {
+    // During tutorial, don't damage the core
+    if (this.tutorial.isActive()) return;
+
     this.coreHP--;
     this.scoring.addMiss(signal.color);
+    vibrateOnMiss();
     this.coreDamageFlash = 1;
     this.shakeIntensity = this.reducedMotion ? 0 : 10;
 
@@ -889,6 +1039,7 @@ export class Game {
     audio.gameOver();
     this.music.stop();
     track('game_over', { mode: this.mode, score: this.scoring.score, elapsed: Math.floor(this.elapsed), maxCombo: this.scoring.maxCombo });
+    this.pwaPrompt.onGameOver(this.mode);
 
     if (this.scoring.finalizeScores(this.mode)) {
       this.scoring.saveHighScores(this.mode, this.dailySeedValue);
@@ -897,6 +1048,13 @@ export class Game {
     if (this.mode === 'daily') {
       this.scoring.updateDailyStreak();
       this.scoring.saveDailyStreak();
+
+      // Submit to Convex and fetch stats
+      submitDailyScore(this.dailySeedValue, this.scoring.score).then(() => {
+        getDailyStats(this.dailySeedValue, this.scoring.score).then((stats) => {
+          this.dailyStats = stats;
+        });
+      });
     }
   }
 
