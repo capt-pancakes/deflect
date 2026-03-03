@@ -22,7 +22,6 @@ jobs:
       - name: Install and Build
         run: |
           npm ci
-          npx convex codegen
           npm run build
       - name: Deploy
         id: builddeploy
