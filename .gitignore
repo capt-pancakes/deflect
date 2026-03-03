@@ -39,4 +39,8 @@ Thumbs.db
 # pnpm-lock.yaml
 # yarn.lock
 
-**/audit/**.claude/worktrees/
+**/audit/**
+.claude/worktrees/
+
+# Convex codegen
+convex/_generated/
