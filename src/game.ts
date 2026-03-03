@@ -70,6 +70,8 @@ export class Game {
   // Tutorial
   tutorial: TutorialManager;
   hasPlayedBefore = false;
+  /** Set during tutorial phase 3 collision handling: true=correct port, false=wrong port, null=no catch */
+  _tutorialCatchResult: boolean | null = null;
 
   // Core
   coreHP = 5;
@@ -92,6 +94,9 @@ export class Game {
   shakeIntensity = 0;
   shakeX = 0;
   shakeY = 0;
+
+  // Combo visual escalation
+  comboGlow = 0;
 
   // Slow motion for near-miss moments
   timeScale = 1;
@@ -287,6 +292,7 @@ export class Game {
     this.spawnTimer = 0;
     this.nextId = 0;
     this.shakeIntensity = 0;
+    this.comboGlow = 0;
     this.timeScale = 1;
     this.timeScaleTarget = 1;
     if (this.nearMissTimeout !== null) {
@@ -325,6 +331,24 @@ export class Game {
       pos,
       vel,
       color: 'red',
+      radius: this.config.signalRadius + 2, // Slightly bigger for tutorial
+      trail: [],
+      alive: true,
+      age: 0,
+      enteredArena: false,
+      deflected: false,
+    });
+  }
+
+  spawnTutorialColorSignal() {
+    // Spawn a slow blue signal from the right side, heading left toward center
+    const pos = vec2(this.centerX + this.arenaRadius + 30, this.centerY);
+    const vel = vec2(-50, 0); // Slow, heading left
+    this.signals.push({
+      id: this.nextId++,
+      pos,
+      vel,
+      color: 'blue',
       radius: this.config.signalRadius + 2, // Slightly bigger for tutorial
       trail: [],
       alive: true,
@@ -394,6 +418,11 @@ export class Game {
     }
     this.coreDamageFlash = Math.max(0, this.coreDamageFlash - scaledDt * 3);
 
+    // Decay combo glow when combo drops below 5
+    if (this.scoring.combo < 5 && this.comboGlow > 0) {
+      this.comboGlow = Math.max(0, this.comboGlow - scaledDt * 2);
+    }
+
     // Smooth score display
     this.scoring.updateDisplayScore(dt);
 
@@ -409,6 +438,7 @@ export class Game {
     this.tutorial.update(dt);
     this.particles.update(dt);
     this.updateDeflectors(dt);
+    this.updateFloatingTexts(dt);
     // Sync core pulse to beat phase (music.update() runs before this)
     this.corePulse = this.music.getBeatState().beatPhase * Math.PI * 2;
 
@@ -439,16 +469,61 @@ export class Game {
       this.checkCollisions();
 
       const action = this.tutorial.checkCompletion(this.signals.length);
-      if (action === 'complete') {
-        this.scoring.hasPlayedBefore = true;
-        try {
-          localStorage.setItem('deflect_played', '1');
-        } catch {}
-        // Reset for real game
-        this.elapsed = 0;
-        this.spawnTimer = 1.5;
+      if (action === 'spawn_color_signal') {
+        // Clear any remaining signals and spawn the color matching signal
+        this.signals = [];
+        this.deflectors = [];
+        this.spawnTutorialColorSignal();
       }
     }
+
+    if (this.tutorial.phase === 3) {
+      // Handle input
+      const swipe = this.input.consumeSwipe();
+      if (swipe) {
+        this.addDeflector(swipe.start, swipe.end);
+      }
+      this.input.consumeTap();
+
+      // Run physics
+      this.updateSignals(dt);
+
+      // Check collisions with tutorial catch tracking
+      this._tutorialCatchResult = null;
+      this.checkCollisions();
+
+      // Check if color matching phase should complete
+      if (this._tutorialCatchResult !== null) {
+        const action = this.tutorial.checkColorCompletion(this._tutorialCatchResult);
+        if (action === 'complete') {
+          this.completeTutorial();
+        } else if (action === 'wrong_port') {
+          this.addFloatingText('WRONG PORT!', vec2(this.centerX, this.centerY - 60), '#ff6666', 1.5);
+          // Respawn the blue signal
+          this.spawnTutorialColorSignal();
+        }
+        this._tutorialCatchResult = null;
+      } else if (this.tutorial.timer > 8) {
+        // Auto-complete after 8 seconds timeout
+        this.tutorial.phase = 4;
+        this.completeTutorial();
+      }
+
+      // If signal escaped arena without being caught, respawn it
+      if (this.tutorial.phase === 3 && this.signals.length === 0) {
+        this.spawnTutorialColorSignal();
+      }
+    }
+  }
+
+  private completeTutorial() {
+    this.scoring.hasPlayedBefore = true;
+    try {
+      localStorage.setItem('deflect_played', '1');
+    } catch {}
+    // Reset for real game
+    this.elapsed = 0;
+    this.spawnTimer = 1.5;
   }
 
   getMenuButtons(): { label: string; mode: GameMode; y: number; color: string }[] {
@@ -807,31 +882,74 @@ export class Game {
   // --- EVENT HANDLERS ---
 
   onCatch(signal: Signal, port: Port) {
+    // During tutorial phase 3, track result but don't score
+    if (this.tutorial.phase === 3) {
+      this._tutorialCatchResult = true;
+      this.particles.burst(signal.pos, COLORS[signal.color], this.reducedMotion ? 8 : 25, 280, 0.7);
+      audio.catch(0);
+      return;
+    }
+
     const points = this.scoring.addCatch();
     port.catchCount++;
+    const combo = this.scoring.combo;
 
-    // Juicy feedback (reduced when motion preference set)
-    this.particles.burst(signal.pos, COLORS[signal.color], this.reducedMotion ? 8 : 25, 280, 0.7);
+    // Combo visual escalation: scale particles and set glow
+    let particleCount = this.reducedMotion ? 8 : 25;
+    if (combo >= 15) {
+      // Max glow + camera shake pulse per catch
+      this.comboGlow = 1.0;
+      particleCount = this.reducedMotion ? 8 : 50; // 2x particles
+      if (!this.reducedMotion) {
+        this.shakeIntensity = 4;
+      }
+    } else if (combo >= 10) {
+      // Brighter glow + 2x particles
+      this.comboGlow = 0.7;
+      particleCount = this.reducedMotion ? 8 : 50; // 2x particles
+    } else if (combo >= 5) {
+      // Subtle glow + 1.5x particles
+      this.comboGlow = 0.4;
+      particleCount = this.reducedMotion ? 8 : 38; // 1.5x particles
+    }
+
+    // Screen flash at 10x combo (not reduced motion)
+    if (combo === 10 && !this.reducedMotion) {
+      // Flash is handled by renderer via comboGlow
+    }
+
+    // Juicy feedback
+    this.particles.burst(signal.pos, COLORS[signal.color], particleCount, 280, 0.7);
     this.addFloatingText(`+${points}`, signal.pos, COLORS[signal.color]);
 
-    if (this.scoring.combo >= 5) {
+    if (combo >= 5) {
       this.addFloatingText(
-        `${this.scoring.combo}x!`,
+        `${combo}x!`,
         vec2(signal.pos.x, signal.pos.y - 25),
         '#ffcc44',
       );
     }
 
-    audio.catch(Math.min(this.scoring.combo - 1, 7));
+    audio.catch(Math.min(combo - 1, 7));
   }
 
   onWrongPort(signal: Signal, _port: Port) {
+    // During tutorial phase 3, track result but don't penalize
+    if (this.tutorial.phase === 3) {
+      this._tutorialCatchResult = false;
+      this.particles.burst(signal.pos, '#666', this.reducedMotion ? 2 : 6, 60, 0.3);
+      return;
+    }
+
     this.scoring.addMiss(signal.color);
     this.particles.burst(signal.pos, '#666', this.reducedMotion ? 2 : 6, 60, 0.3);
     this.addFloatingText('WRONG', signal.pos, '#ff6666', 1);
   }
 
   onEscape(signal: Signal) {
+    // During tutorial, don't penalize escapes
+    if (this.tutorial.isActive()) return;
+
     this.scoring.addMiss(signal.color);
     this.particles.burst(signal.pos, '#444', this.reducedMotion ? 1 : 4, 40, 0.3);
   }
@@ -857,6 +975,9 @@ export class Game {
   }
 
   onCoreDamage(signal: Signal) {
+    // During tutorial, don't damage the core
+    if (this.tutorial.isActive()) return;
+
     this.coreHP--;
     this.scoring.addMiss(signal.color);
     this.coreDamageFlash = 1;

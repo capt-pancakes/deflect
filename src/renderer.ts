@@ -140,6 +140,7 @@ export interface RenderableGameState {
   isMuted: boolean;
   muteButtonX: number;
   muteButtonY: number;
+  comboGlow: number;
   reducedMotion: boolean;
   getMenuButtons(): MenuButton[];
   input: { getActiveSwipe(): ActiveSwipe | null };
@@ -352,6 +353,23 @@ export class Renderer {
 
     this.renderArenaRing(ctx, game, 0.12, beatState);
 
+    // Combo glow: radial gradient around arena when comboGlow > 0
+    if (game.comboGlow > 0 && !game.reducedMotion) {
+      const glowRadius = game.arenaRadius * 1.3;
+      const gradient = ctx.createRadialGradient(
+        game.centerX, game.centerY, game.arenaRadius * 0.6,
+        game.centerX, game.centerY, glowRadius,
+      );
+      const alpha = game.comboGlow * 0.25;
+      gradient.addColorStop(0, `rgba(68, 136, 255, ${alpha})`);
+      gradient.addColorStop(0.6, `rgba(68, 136, 255, ${alpha * 0.4})`);
+      gradient.addColorStop(1, 'rgba(68, 136, 255, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(game.centerX, game.centerY, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Beat ring ripples (Phase 2.3) - spawn on strong kicks
     if (!game.reducedMotion && beatState.kickIntensity > 0.5 && this.prevKickIntensity <= 0.5) {
       if (this.beatRipples.length < 3) {
@@ -461,8 +479,14 @@ export class Renderer {
   }
 
   private renderTutorial(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
-    if (game.tutorial.phase !== 1) return;
+    if (game.tutorial.phase === 1) {
+      this.renderTutorialPhase1(ctx, game);
+    } else if (game.tutorial.phase === 3) {
+      this.renderTutorialPhase3(ctx, game);
+    }
+  }
 
+  private renderTutorialPhase1(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
     // Ghost swipe animation
     const t = (game.tutorial.ghostSwipeAnim % 2) / 2; // 0 to 1 over 2 seconds
     if (t < 0.6) {
@@ -498,6 +522,23 @@ export class Renderer {
     ctx.fillStyle = `rgba(255, 255, 255, ${hintAlpha})`;
     ctx.font = fontString(Math.min(game.width * 0.06, 28), true);
     ctx.fillText('SWIPE TO DEFLECT!', game.centerX, game.height - 100);
+  }
+
+  private renderTutorialPhase3(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+    // Pulsing hint text
+    const hintAlpha = Math.sin(game.tutorial.ghostSwipeAnim * 4) * 0.3 + 0.7;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Main hint: "MATCH THE COLORS!"
+    ctx.fillStyle = `rgba(68, 136, 255, ${hintAlpha})`;
+    ctx.font = fontString(Math.min(game.width * 0.06, 28), true);
+    ctx.fillText('MATCH THE COLORS!', game.centerX, game.height - 120);
+
+    // Subtitle: "Guide blue to blue port"
+    ctx.fillStyle = `rgba(68, 136, 255, ${hintAlpha * 0.7})`;
+    ctx.font = fontString(Math.min(game.width * 0.04, 18));
+    ctx.fillText('Guide blue to blue port', game.centerX, game.height - 85);
   }
 
   private renderPorts(ctx: CanvasRenderingContext2D, game: RenderableGameState, beatState?: BeatState): void {
