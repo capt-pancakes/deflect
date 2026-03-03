@@ -112,7 +112,11 @@ export interface RenderableGameState {
   tutorial: {
     phase: number;
     ghostSwipeAnim: number;
+    hintText: string;
+    hintTextTimer: number;
     isActive(): boolean;
+    isPromptPhase(): boolean;
+    isIntroPhase(): boolean;
   };
   difficulty: {
     activeColors: number;
@@ -495,27 +499,56 @@ export class Renderer {
   }
 
   private renderTutorial(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
-    if (game.tutorial.phase === 1) {
-      this.renderTutorialPhase1(ctx, game);
-    } else if (game.tutorial.phase === 3) {
-      this.renderTutorialPhase3(ctx, game);
+    // Ghost swipe for prompt phases
+    if (game.tutorial.isPromptPhase()) {
+      this.renderGhostSwipe(ctx, game);
+    }
+
+    // Pulsing highlight on blue port during phase 7
+    if (game.tutorial.phase === 7) {
+      this.renderBluePortHighlight(ctx, game);
+    }
+
+    // Hint text for all active phases
+    if (game.tutorial.hintText) {
+      this.renderTutorialHintText(ctx, game);
     }
   }
 
-  private renderTutorialPhase1(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
-    // Ghost swipe animation
-    const t = (game.tutorial.ghostSwipeAnim % 2) / 2; // 0 to 1 over 2 seconds
+  private renderGhostSwipe(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+    const cx = game.centerX;
+    const cy = game.centerY;
+    const phase = game.tutorial.phase;
+
+    if (phase === 1) {
+      // Step 1: Ball from top going down. Horizontal line above center
+      // bounces it back up toward the red port at top.
+      this.drawSingleGhostSwipe(ctx, game, cx - 60, cy - 30, cx + 60, cy - 30, 0);
+    } else if (phase === 4) {
+      // Step 2: Two balls from top-left and top-right converging on center.
+      // Left-side angled line intercepts left ball, right-side intercepts right ball.
+      this.drawSingleGhostSwipe(ctx, game, cx - 90, cy, cx - 20, cy - 60, 0);
+      this.drawSingleGhostSwipe(ctx, game, cx + 20, cy - 60, cx + 90, cy, 1.0);
+    } else if (phase === 7) {
+      // Step 3: Blue ball from right going left. Blue port is at bottom.
+      // A line angled lower-left to upper-right deflects the ball downward.
+      this.drawSingleGhostSwipe(ctx, game, cx - 20, cy + 40, cx + 50, cy - 40, 0);
+    }
+  }
+
+  private drawSingleGhostSwipe(
+    ctx: CanvasRenderingContext2D,
+    game: RenderableGameState,
+    startX: number, startY: number,
+    endX: number, endY: number,
+    timeOffset: number,
+  ): void {
+    const t = ((game.tutorial.ghostSwipeAnim + timeOffset) % 2) / 2;
     if (t < 0.6) {
       const progress = t / 0.6;
-      const startX = game.centerX - 60;
-      const startY = game.centerY + 40;
-      const endX = game.centerX + 60;
-      const endY = game.centerY - 20;
-
       const currentX = startX + (endX - startX) * progress;
       const currentY = startY + (endY - startY) * progress;
 
-      // Ghost finger trail
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 * (1 - progress * 0.5)})`;
       ctx.lineWidth = 6;
       ctx.lineCap = 'round';
@@ -524,37 +557,49 @@ export class Renderer {
       ctx.lineTo(currentX, currentY);
       ctx.stroke();
 
-      // Ghost finger
       ctx.fillStyle = `rgba(255, 255, 255, ${0.4})`;
       ctx.beginPath();
       ctx.arc(currentX, currentY, 14, 0, Math.PI * 2);
       ctx.fill();
     }
-
-    // "SWIPE!" hint
-    const hintAlpha = Math.sin(game.tutorial.ghostSwipeAnim * 4) * 0.3 + 0.7;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = `rgba(255, 255, 255, ${hintAlpha})`;
-    ctx.font = fontString(Math.min(game.width * 0.06, 28), true);
-    ctx.fillText('SWIPE TO DEFLECT!', game.centerX, game.height - 100);
   }
 
-  private renderTutorialPhase3(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
-    // Pulsing hint text
+  private renderBluePortHighlight(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+    // Find the blue port and draw a pulsing highlight ring
+    for (const port of game.ports) {
+      if (port.color !== 'blue') continue;
+      const midAngle = (port.angleStart + port.angleEnd) / 2;
+      const pulse = Math.sin(game.animTime * 5) * 0.3 + 0.7;
+      const r = game.arenaRadius;
+
+      ctx.strokeStyle = `rgba(68, 136, 255, ${pulse * 0.6})`;
+      ctx.lineWidth = 6 + Math.sin(game.animTime * 5) * 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(game.centerX, game.centerY, r + 12, port.angleStart - 0.1, port.angleEnd + 0.1);
+      ctx.stroke();
+
+      // Arrow pointing at the port
+      const ax = game.centerX + Math.cos(midAngle) * (r + 28);
+      const ay = game.centerY + Math.sin(midAngle) * (r + 28);
+      ctx.fillStyle = `rgba(68, 136, 255, ${pulse})`;
+      ctx.beginPath();
+      ctx.arc(ax, ay, 6, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+  }
+
+  private renderTutorialHintText(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
     const hintAlpha = Math.sin(game.tutorial.ghostSwipeAnim * 4) * 0.3 + 0.7;
+    const isColorPhase = game.tutorial.phase === 6 || game.tutorial.phase === 7;
+    const color = isColorPhase ? '68, 136, 255' : '255, 255, 255';
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-
-    // Main hint: "MATCH THE COLORS!"
-    ctx.fillStyle = `rgba(68, 136, 255, ${hintAlpha})`;
+    ctx.fillStyle = `rgba(${color}, ${hintAlpha})`;
     ctx.font = fontString(Math.min(game.width * 0.06, 28), true);
-    ctx.fillText('MATCH THE COLORS!', game.centerX, game.height - 120);
-
-    // Subtitle: "Guide blue to blue port"
-    ctx.fillStyle = `rgba(68, 136, 255, ${hintAlpha * 0.7})`;
-    ctx.font = fontString(Math.min(game.width * 0.04, 18));
-    ctx.fillText('Guide blue to blue port', game.centerX, game.height - 85);
+    ctx.fillText(game.tutorial.hintText, game.centerX, game.height - 100);
   }
 
   private renderPorts(ctx: CanvasRenderingContext2D, game: RenderableGameState, beatState?: BeatState): void {

@@ -176,7 +176,7 @@ describe('Game integration', () => {
 
   it('update(1/60) runs without throwing', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 4;
+    game.tutorial.phase = 9;
     expect(() => game.update(1 / 60)).not.toThrow();
   });
 
@@ -186,13 +186,13 @@ describe('Game integration', () => {
 
   it('render() in playing state runs without throwing', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 4;
+    game.tutorial.phase = 9;
     expect(() => game.render()).not.toThrow();
   });
 
   it('after enough updates, signals spawn', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 4;
+    game.tutorial.phase = 9;
 
     const dt = 1 / 60;
     for (let i = 0; i < 200; i++) {
@@ -204,7 +204,7 @@ describe('Game integration', () => {
 
   it('destroy() cleans up without throwing', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 4;
+    game.tutorial.phase = 9;
     for (let i = 0; i < 10; i++) {
       game.update(1 / 60);
     }
@@ -240,14 +240,14 @@ describe('Game integration', () => {
 
   it('multiple start/destroy cycles work', () => {
     game.startGame('arcade');
-    game.tutorial.phase = 4;
+    game.tutorial.phase = 9;
     for (let i = 0; i < 30; i++) game.update(1 / 60);
     game.destroy();
 
     const { canvas } = createMockCanvas();
     const game2 = new Game(canvas);
     game2.startGame('zen');
-    game2.tutorial.phase = 4;
+    game2.tutorial.phase = 9;
     for (let i = 0; i < 30; i++) game2.update(1 / 60);
     expect(() => game2.destroy()).not.toThrow();
   });
@@ -285,7 +285,7 @@ describe('Game integration', () => {
 
     it('comboGlow is 0.4 at combo 5', () => {
       game.startGame('arcade');
-      game.tutorial.phase = 4;
+      game.tutorial.phase = 9; // Skip tutorial (DONE)
       // Build combo to 5
       for (let i = 0; i < 5; i++) {
         game.onCatch(makeMockSignal(), makeMockPort());
@@ -295,7 +295,7 @@ describe('Game integration', () => {
 
     it('comboGlow is 0.7 at combo 10', () => {
       game.startGame('arcade');
-      game.tutorial.phase = 4;
+      game.tutorial.phase = 9;
       for (let i = 0; i < 10; i++) {
         game.onCatch(makeMockSignal(), makeMockPort());
       }
@@ -304,7 +304,7 @@ describe('Game integration', () => {
 
     it('comboGlow is 1.0 at combo 15', () => {
       game.startGame('arcade');
-      game.tutorial.phase = 4;
+      game.tutorial.phase = 9;
       for (let i = 0; i < 15; i++) {
         game.onCatch(makeMockSignal(), makeMockPort());
       }
@@ -313,7 +313,7 @@ describe('Game integration', () => {
 
     it('shakeIntensity increases at combo 15', () => {
       game.startGame('arcade');
-      game.tutorial.phase = 4;
+      game.tutorial.phase = 9;
       for (let i = 0; i < 15; i++) {
         game.onCatch(makeMockSignal(), makeMockPort());
       }
@@ -322,7 +322,7 @@ describe('Game integration', () => {
 
     it('comboGlow decays when combo drops below 5', () => {
       game.startGame('arcade');
-      game.tutorial.phase = 4;
+      game.tutorial.phase = 9;
       // Build combo
       for (let i = 0; i < 5; i++) {
         game.onCatch(makeMockSignal(), makeMockPort());
@@ -340,7 +340,7 @@ describe('Game integration', () => {
 
     it('comboGlow does not set during tutorial', () => {
       game.startGame('arcade');
-      // tutorial is active (phase 3)
+      // tutorial is active (phase 3 = STEP2_INTRO)
       game.tutorial.phase = 3;
       game._tutorialCatchResult = true;
       game.onCatch(makeMockSignal(), makeMockPort());

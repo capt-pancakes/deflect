@@ -74,7 +74,7 @@ export class Game {
   // Tutorial
   tutorial: TutorialManager;
   hasPlayedBefore = false;
-  /** Set during tutorial phase 3 collision handling: true=correct port, false=wrong port, null=no catch */
+  /** Set during tutorial resolve collision handling: true=correct port, false=wrong port, null=no catch */
   _tutorialCatchResult: boolean | null = null;
 
   // Core
@@ -335,7 +335,7 @@ export class Game {
   }
 
   spawnTutorialSignal() {
-    // Spawn a slow signal from top, aimed at center
+    // Step 1: one red ball from top, aimed at center
     const pos = vec2(this.centerX, this.centerY - this.arenaRadius - 30);
     const vel = vec2(0, 60); // Very slow, straight down
     this.signals.push({
@@ -343,7 +343,7 @@ export class Game {
       pos,
       vel,
       color: 'red',
-      radius: this.config.signalRadius + 2, // Slightly bigger for tutorial
+      radius: this.config.signalRadius + 2,
       trail: [],
       alive: true,
       age: 0,
@@ -352,16 +352,43 @@ export class Game {
     });
   }
 
-  spawnTutorialColorSignal() {
-    // Spawn a slow blue signal from the right side, heading left toward center
+  spawnTutorialStep2() {
+    // Step 2: two red balls from top-left and top-right
+    const offset = this.arenaRadius * 0.6;
+    const positions = [
+      vec2(this.centerX - offset, this.centerY - this.arenaRadius - 30),
+      vec2(this.centerX + offset, this.centerY - this.arenaRadius - 30),
+    ];
+    for (const pos of positions) {
+      const dir = normalize(sub(vec2(this.centerX, this.centerY), pos));
+      const vel = scale(dir, 60);
+      this.signals.push({
+        id: this.nextId++,
+        pos,
+        vel,
+        color: 'red',
+        radius: this.config.signalRadius + 2,
+        trail: [],
+        alive: true,
+        age: 0,
+        enteredArena: false,
+        deflected: false,
+      });
+    }
+  }
+
+  spawnTutorialStep3() {
+    // Step 3: one blue ball from right side, heading left toward center.
+    // Blue port is at the bottom (PI/2) with 2 colors active,
+    // so spawning from the right lets the player deflect it downward.
     const pos = vec2(this.centerX + this.arenaRadius + 30, this.centerY);
-    const vel = vec2(-50, 0); // Slow, heading left
+    const vel = vec2(-60, 0);
     this.signals.push({
       id: this.nextId++,
       pos,
       vel,
       color: 'blue',
-      radius: this.config.signalRadius + 2, // Slightly bigger for tutorial
+      radius: this.config.signalRadius + 2,
       trail: [],
       alive: true,
       age: 0,
@@ -451,11 +478,15 @@ export class Game {
     this.particles.update(dt);
     this.updateDeflectors(dt);
     this.updateFloatingTexts(dt);
+    this.coreDamageFlash = Math.max(0, this.coreDamageFlash - dt * 3);
     // Sync core pulse to beat phase (music.update() runs before this)
     this.corePulse = this.music.getBeatState().beatPhase * Math.PI * 2;
 
-    if (this.tutorial.phase === 1) {
-      // Slow the signal way down during tutorial
+    // --- Prompt phases (1, 4, 7): slow-mo, ghost swipe, accept input ---
+    if (this.tutorial.isPromptPhase()) {
+      this.timeScaleTarget = 0.1;
+
+      // Move signals at 0.5x speed (on top of time scale)
       for (const s of this.signals) {
         s.pos.x += s.vel.x * dt * 0.5;
         s.pos.y += s.vel.y * dt * 0.5;
@@ -466,31 +497,29 @@ export class Game {
         }
       }
 
-      // Check for swipe
+      // Auto-respawn if signals die during prompt (hit core before swipe)
+      if (this.signals.length === 0) {
+        if (this.tutorial.phase === 1) this.spawnTutorialSignal();
+        else if (this.tutorial.phase === 4) this.spawnTutorialStep2();
+        else if (this.tutorial.phase === 7) this.spawnTutorialStep3();
+      }
+
+      // Accept swipe input
       const swipe = this.input.consumeSwipe();
       if (swipe) {
         this.addDeflector(swipe.start, swipe.end);
         this.tutorial.onSwipe();
+        this.timeScaleTarget = 0.5;
       }
-      this.input.consumeTap(); // Eat taps
+      this.input.consumeTap();
+      return;
     }
 
-    if (this.tutorial.phase === 2) {
-      // Let physics run to see the bounce + catch
-      this.updateSignals(dt);
-      this.checkCollisions();
+    // --- Resolve phases (2, 5, 8): physics running, still accept swipes ---
+    if (this.tutorial.phase === 2 || this.tutorial.phase === 5 || this.tutorial.phase === 8) {
+      this.timeScaleTarget = 0.7;
 
-      const action = this.tutorial.checkCompletion(this.signals.length);
-      if (action === 'spawn_color_signal') {
-        // Clear any remaining signals and spawn the color matching signal
-        this.signals = [];
-        this.deflectors = [];
-        this.spawnTutorialColorSignal();
-      }
-    }
-
-    if (this.tutorial.phase === 3) {
-      // Handle input
+      // Accept additional swipes (player may need a second line in step 2)
       const swipe = this.input.consumeSwipe();
       if (swipe) {
         this.addDeflector(swipe.start, swipe.end);
@@ -499,32 +528,46 @@ export class Game {
 
       // Run physics
       this.updateSignals(dt);
-
-      // Check collisions with tutorial catch tracking
       this._tutorialCatchResult = null;
       this.checkCollisions();
 
-      // Check if color matching phase should complete
-      if (this._tutorialCatchResult !== null) {
-        const action = this.tutorial.checkColorCompletion(this._tutorialCatchResult);
-        if (action === 'complete') {
-          this.completeTutorial();
-        } else if (action === 'wrong_port') {
-          this.addFloatingText('WRONG PORT!', vec2(this.centerX, this.centerY - 60), '#ff6666', 1.5);
-          // Respawn the blue signal
-          this.spawnTutorialColorSignal();
-        }
-        this._tutorialCatchResult = null;
-      } else if (this.tutorial.timer > 8) {
-        // Auto-complete after 8 seconds timeout
-        this.tutorial.phase = 4;
-        this.completeTutorial();
+      // Auto-respawn if signals die during resolve (e.g. hit core)
+      if (this.signals.length === 0 && this.tutorial.phase !== 8) {
+        // For phases 2, 5 just let checkResolution handle the transition
       }
 
-      // If signal escaped arena without being caught, respawn it
-      if (this.tutorial.phase === 3 && this.signals.length === 0) {
-        this.spawnTutorialColorSignal();
+      const action = this.tutorial.checkResolution(this.signals.length);
+      if (action === 'spawn_step2') {
+        // Phase 2→3 transition: clear and prepare for intro
+        this.signals = [];
+        this.deflectors = [];
+      } else if (action === 'spawn_step3') {
+        // Phase 5→6 transition: clear and prepare for intro
+        this.signals = [];
+        this.deflectors = [];
+      } else if (action === 'complete') {
+        this.completeTutorial();
       }
+      return;
+    }
+
+    // --- Intro phases (3, 6): show text, wait 2s, then spawn next step ---
+    if (this.tutorial.isIntroPhase()) {
+      this.timeScaleTarget = 0.5;
+
+      const action = this.tutorial.checkIntroComplete();
+      if (action === 'spawn_step2') {
+        this.spawnTutorialStep2();
+      } else if (action === 'spawn_step3') {
+        // Bump active colors to 2 and rebuild ports for blue
+        this.difficulty.activeColors = 2;
+        this.ports = [];
+        this.setupPorts();
+        this.spawnTutorialStep3();
+      }
+      this.input.consumeSwipe();
+      this.input.consumeTap();
+      return;
     }
   }
 
@@ -533,9 +576,15 @@ export class Game {
     try {
       localStorage.setItem('deflect_played', '1');
     } catch {}
+    // Smooth ramp to full speed
+    this.timeScaleTarget = 1.0;
     // Reset for real game
     this.elapsed = 0;
     this.spawnTimer = 1.5;
+    // Reset difficulty and ports for normal gameplay
+    this.difficulty.reset(this.config);
+    this.ports = [];
+    this.setupPorts();
   }
 
   getMenuButtons(): { label: string; mode: GameMode; y: number; color: string }[] {
@@ -911,8 +960,8 @@ export class Game {
   // --- EVENT HANDLERS ---
 
   onCatch(signal: Signal, port: Port) {
-    // During tutorial phase 3, track result but don't score
-    if (this.tutorial.phase === 3) {
+    // During tutorial resolve phases, track result but don't score
+    if (this.tutorial.isActive()) {
       this._tutorialCatchResult = true;
       this.particles.burst(signal.pos, COLORS[signal.color], this.reducedMotion ? 8 : 25, 280, 0.7);
       audio.catch(0);
@@ -961,8 +1010,8 @@ export class Game {
   }
 
   onWrongPort(signal: Signal, _port: Port) {
-    // During tutorial phase 3, track result but don't penalize
-    if (this.tutorial.phase === 3) {
+    // During tutorial resolve phases, track result but don't penalize
+    if (this.tutorial.isActive()) {
       this._tutorialCatchResult = false;
       this.particles.burst(signal.pos, '#666', this.reducedMotion ? 2 : 6, 60, 0.3);
       return;
@@ -1003,8 +1052,11 @@ export class Game {
   }
 
   onCoreDamage(signal: Signal) {
-    // During tutorial, don't damage the core
-    if (this.tutorial.isActive()) return;
+    // During tutorial, skip HP loss but show mild flash
+    if (this.tutorial.isActive()) {
+      this.coreDamageFlash = 0.3;
+      return;
+    }
 
     this.coreHP--;
     this.scoring.addMiss(signal.color);
