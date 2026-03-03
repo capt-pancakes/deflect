@@ -141,6 +141,7 @@ export interface RenderableGameState {
   muteButtonX: number;
   muteButtonY: number;
   reducedMotion: boolean;
+  pwaPrompt: { shouldShow(): boolean };
   getMenuButtons(): MenuButton[];
   input: { getActiveSwipe(): ActiveSwipe | null };
 }
@@ -298,6 +299,11 @@ export class Renderer {
     }
 
     this.renderMuteButton(ctx, game);
+
+    // PWA install banner
+    if (game.pwaPrompt.shouldShow()) {
+      this.renderPwaBanner(ctx, game);
+    }
   }
 
   private renderArenaRing(
@@ -1028,5 +1034,35 @@ export class Renderer {
     ctx.fillStyle = color;
     ctx.font = fontString(Math.min(game.width * 0.03, 12), true);
     ctx.fillText(label, x, y);
+  }
+
+  private renderPwaBanner(ctx: CanvasRenderingContext2D, game: RenderableGameState): void {
+    const bannerH = 48;
+    const bannerY = 0;
+
+    // Background
+    ctx.fillStyle = '#4488ff22';
+    ctx.fillRect(0, bannerY, game.width, bannerH);
+
+    // Border bottom
+    ctx.strokeStyle = '#4488ff44';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, bannerY + bannerH);
+    ctx.lineTo(game.width, bannerY + bannerH);
+    ctx.stroke();
+
+    // Text
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#4488ff';
+    ctx.font = fontString(Math.min(game.width * 0.035, 14), true);
+    ctx.fillText('Add DEFLECT to home screen', game.width / 2, bannerY + bannerH / 2);
+
+    // Dismiss X button
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#8888aa';
+    ctx.font = fontString(14);
+    ctx.fillText('\u2715', game.width - 22, bannerY + bannerH / 2);
   }
 }
